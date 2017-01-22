@@ -426,7 +426,7 @@ int ipcon_register_service(IPCON_HANDLER handler, char *name,
 		nlmsg_free(msg);
 
 	} while (0);
-	pthread_mutex_lock(&iph->mutex);
+	pthread_mutex_unlock(&iph->mutex);
 
 	return ret;
 }
