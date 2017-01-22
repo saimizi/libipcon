@@ -87,6 +87,7 @@ int main(int argc, char *argv[])
 	struct nl_sock *sk = NULL;
 	struct nl_msg *msg = NULL;
 	void *hdr = NULL;
+	__u32 local_port = 0;
 
 	do {
 		sk = nl_socket_alloc();
@@ -95,7 +96,8 @@ int main(int argc, char *argv[])
 			ret = 1;
 			break;
 		}
-		ipcon_dbg("local port %u\n", nl_socket_get_local_port(sk));
+		local_port = nl_socket_get_local_port(sk);
+		ipcon_dbg("local port %u\n", local_port);
 
 		ret = genl_connect(sk);
 		if (ret < 0) {
@@ -142,13 +144,12 @@ int main(int argc, char *argv[])
 		}
 
 		nla_put_u32(msg, IPCON_ATTR_MSG_TYPE, IPCON_MSG_UNICAST);
-		nla_put_u32(msg, IPCON_ATTR_PORT,
-				nl_socket_get_local_port(sk));
+		nla_put_u32(msg, IPCON_ATTR_PORT, local_port);
 		nla_put_string(msg, IPCON_ATTR_SRV_NAME, argv[1]);
 		nla_put_u32(msg, IPCON_ATTR_SRV_GROUP, IPCON_AUTO_GROUP);
 
 
-		ret = nl_send_auto_complete(sk, msg);
+		ret = nl_send_auto(sk, msg);
 		if (ret < 0) {
 			ipcon_err("failed to send msg(%d).\n", ret);
 			ret = 1;

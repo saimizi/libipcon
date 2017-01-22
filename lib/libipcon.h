@@ -5,6 +5,7 @@
 
 #define IPCON_HANDLER	void *
 
+#define IPCON_MAX_USR_GROUP	5
 
 IPCON_HANDLER ipcon_create_handler(void);
 int ipcon_free_handler(IPCON_HANDLER handler);
