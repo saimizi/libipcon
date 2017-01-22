@@ -382,23 +382,22 @@ int ipcon_register_service(IPCON_HANDLER handler, char *name,
 			return -ENOSPC;
 	}
 
+
+	msg = nlmsg_alloc();
+	if (!msg)
+		return -ENOMEM;
+
+	pthread_mutex_lock(&iph->mutex);
 	do {
 		struct nlmsghdr *nlh = NULL;
 		struct nlattr *tb[NUM_IPCON_ATTR];
-
-		msg = nlmsg_alloc();
-		if (!msg) {
-			ipcon_err("msg alloc failed.\n");
-			ret = -ENOMEM;
-			break;
-		}
 
 		genlmsg_put(msg, 0, 0, iph->ipcon_family,
 			IPCON_HDR_SIZE, 0, IPCON_SRV_REG, 1);
 
 		nla_put_u32(msg, IPCON_ATTR_MSG_TYPE, IPCON_MSG_UNICAST);
 		nla_put_u32(msg, IPCON_ATTR_PORT,
-				nl_socket_get_local_port(iph->sk));
+					nl_socket_get_local_port(iph->sk));
 		nla_put_string(msg, IPCON_ATTR_SRV_NAME, name);
 		nla_put_u32(msg, IPCON_ATTR_SRV_GROUP, group);
 
@@ -427,6 +426,7 @@ int ipcon_register_service(IPCON_HANDLER handler, char *name,
 		nlmsg_free(msg);
 
 	} while (0);
+	pthread_mutex_lock(&iph->mutex);
 
 	return ret;
 }
