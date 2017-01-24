@@ -7,12 +7,12 @@
 #define IPCON_ANY_PORT	0xFFFFFFFF
 
 struct ipcon_grp_info {
-	char *name[IPCON_MAX_GRP_NAME_LEN];
+	char *name;
 	__u32 groupid;
 };
 
 struct ipcon_srv_info {
-	char *name[IPCON_MAX_SRV_NAME_LEN];
+	char *name;
 };
 
 struct ipcon_msg_queue {

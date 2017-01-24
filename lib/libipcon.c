@@ -7,11 +7,42 @@
 #include <errno.h>
 #include <fcntl.h>
 #include <netlink/netlink.h>
+#include <netlink/errno.h>
 #include <netlink/genl/genl.h>
 #include <netlink/genl/ctrl.h>
 #include <pthread.h>
 
 #include "libipcon_priv.h"
+
+/*
+ * Basically libnl error code are not expected.
+ * We just want a errno number which is partly destroyed by libnl...
+ * Any internal error in libnl, return -EREMOTEIO.
+ */
+static inline int libnl_error(int error)
+{
+	error = abs(error);
+
+	switch (error) {
+	case NLE_BAD_SOCK:	return -EBADF;
+	case NLE_EXIST:		return -EEXIST;
+	case NLE_NOADDR:	return -EADDRNOTAVAIL;
+	case NLE_OBJ_NOTFOUND:	return -ENOENT;
+	case NLE_INTR:		return -EINTR;
+	case NLE_AGAIN:		return -EAGAIN;
+	case NLE_INVAL:		return -EINVAL;
+	case NLE_NOACCESS:	return -EACCES;
+	case NLE_NOMEM:		return -ENOMEM;
+	case NLE_AF_NOSUPPORT:	return -EAFNOSUPPORT;
+	case NLE_PROTO_MISMATCH:return -EPROTONOSUPPORT;
+	case NLE_OPNOTSUPP:	return -EOPNOTSUPP;
+	case NLE_PERM:		return -EPERM;
+	case NLE_BUSY:		return -EBUSY;
+	case NLE_RANGE:		return -ERANGE;
+	case NLE_NODEV:		return -ENODEV;
+	default:		return -EREMOTEIO;
+	}
+}
 
 struct ipcon_rcv_msg_info {
 	struct ipcon_peer_handler *iph;
@@ -29,8 +60,6 @@ static struct nla_policy ipcon_policy[NUM_IPCON_ATTR] = {
 	[IPCON_ATTR_SRV_GROUP] = {.type = NLA_U32},
 	[IPCON_ATTR_DATA] = {.type = NLA_BINARY, .maxlen = IPCON_MAX_MSG_LEN},
 };
-
-
 
 static int queue_msg(struct ipcon_msg_queue **head, struct nl_msg *msg)
 {
@@ -193,6 +222,21 @@ static int valid_msg_cb(struct nl_msg *msg, void *arg)
 	return NL_OK;
 }
 
+/*
+ * ipcon_rcv_msg
+ *
+ * Receive a specified message.
+ * Message may be disordered, so this function is just an internal one.
+ *
+ * If a not matched message is recevied, it will be queued and -EAGAIN is
+ * returned. while, nlerror message will never be queued. Since nlerror message
+ * is processed sychronously by exclusion, there is no case that a nlerror
+ * message will be miss received. error code of the nlerror will be returned.
+ *
+ * target_port: receive from a specified port, a IPCON_ANY_PORT match any port.
+ * target_cmd:  receive a specified cmd, a IPCON_ANY_CMD match any command.
+ */
+
 static int ipcon_rcv_msg(struct ipcon_peer_handler *iph,
 			__u32 target_port, int target_cmd, struct nl_msg **pmsg)
 {
@@ -206,7 +250,8 @@ static int ipcon_rcv_msg(struct ipcon_peer_handler *iph,
 
 	msg = dequeue_msg_cond(&iph->mq, target_port, target_cmd);
 	if (msg) {
-		*pmsg = msg;
+		if (pmsg)
+			*pmsg = msg;
 		return 0;
 	}
 
@@ -215,23 +260,32 @@ static int ipcon_rcv_msg(struct ipcon_peer_handler *iph,
 	irmi.target_cmd = target_cmd;
 	irmi.msg = NULL;
 
-	ret = nl_socket_modify_cb(iph->sk,
-				NL_CB_VALID,
-				NL_CB_CUSTOM,
-				valid_msg_cb,
-				(void *)&irmi);
+	nl_socket_modify_cb(iph->sk,
+			NL_CB_VALID,
+			NL_CB_CUSTOM,
+			valid_msg_cb,
+			(void *)&irmi);
 
-	if (ret < 0)
-		return ret;
-
-	do {
-		ret = nl_recvmsgs_default(iph->sk);
-		if (ret < 0)
-			break;
-	} while (!irmi.msg);
-
-	if (!ret)
-		*pmsg = irmi.msg;
+	ret = nl_recvmsgs_default(iph->sk);
+	if (!ret) {
+		/*
+		 * If target message is not received, just return -EAGAIN to
+		 * inform caller. Do NOT loop here to wait the target message so
+		 * that non-block I/O can also be processed.
+		 *
+		 * if caller doesn't specify pmsg, error information is just
+		 * wanted. nlmsg_free() can deal with NULL pointer, no check
+		 * need.
+		 */
+		if (pmsg && !irmi.msg)
+			ret = -EAGAIN;
+		else if (pmsg)
+			*pmsg = irmi.msg;
+		else
+			nlmsg_free(irmi.msg);
+	} else {
+		ret = libnl_error(ret);
+	}
 
 	return ret;
 }
@@ -244,8 +298,10 @@ static int ipcon_send_msg(struct ipcon_peer_handler *iph, struct nl_msg *msg)
 		return -EINVAL;
 
 	ret = nl_send_auto(iph->sk, msg);
-	if (ret > 0)
+	if (ret >= 0)
 		ret = 0;
+	else
+		ret = libnl_error(ret);
 
 	return ret;
 }
@@ -302,8 +358,13 @@ IPCON_HANDLER ipcon_create_handler(void)
 			break;
 
 		iph->ipcon_family = genl_ctrl_resolve(iph->sk, IPCON_GENL_NAME);
-		if (iph->ipcon_family < 0)
+		if (iph->ipcon_family < 0) {
+			iph->ipcon_family = 0;
 			break;
+		}
+
+		/* We don't required a ACK by default */
+		nl_socket_disable_auto_ack(iph->sk);
 
 		return iph_to_handler(iph);
 
@@ -347,23 +408,18 @@ static inline int find_empty_grop_slot(struct ipcon_peer_handler *iph)
 /*
  * ipcon_register_service
  *
- * Register a service point. A service must have a name and may or may not have
- * a group. The following information of a service point can be resloved by
- * using ipcon_find_service() with the name of the service.
- *
- * - Port
- * - Group number
+ * Register a service point. A service must have a name.
  */
 
-int ipcon_register_service(IPCON_HANDLER handler, char *name,
-				unsigned int group)
+int ipcon_register_service(IPCON_HANDLER handler, char *name)
 {
 	struct ipcon_peer_handler *iph = handler_to_iph(handler);
-	struct nl_msg *msg = NULL;
 	void *hdr = NULL;
 	int ret = 0;
 	int srv_name_len;
-	int empty_grp_slot = -1;
+	struct nlmsghdr *nlh = NULL;
+	struct nl_msg *msg = NULL;
+	struct nlattr *tb[NUM_IPCON_ATTR];
 
 	if (!iph || !name)
 		return -EINVAL;
@@ -372,60 +428,53 @@ int ipcon_register_service(IPCON_HANDLER handler, char *name,
 	if (!srv_name_len || srv_name_len > IPCON_MAX_SRV_NAME_LEN)
 		return -EINVAL;
 
-	if (!valid_user_ipcon_group(group) &&
-		(group > IPCON_NO_GROUP))
-		return -EINVAL;
-
-	if (group != IPCON_NO_GROUP) {
-		empty_grp_slot = find_empty_grop_slot(iph);
-		if (empty_grp_slot < 0)
-			return -ENOSPC;
-	}
-
-
-	msg = nlmsg_alloc();
-	if (!msg)
-		return -ENOMEM;
-
 	pthread_mutex_lock(&iph->mutex);
+
 	do {
-		struct nlmsghdr *nlh = NULL;
-		struct nlattr *tb[NUM_IPCON_ATTR];
-
-		genlmsg_put(msg, 0, 0, iph->ipcon_family,
-			IPCON_HDR_SIZE, 0, IPCON_SRV_REG, 1);
-
-		nla_put_u32(msg, IPCON_ATTR_MSG_TYPE, IPCON_MSG_UNICAST);
-		nla_put_u32(msg, IPCON_ATTR_PORT,
-					nl_socket_get_local_port(iph->sk));
-		nla_put_string(msg, IPCON_ATTR_SRV_NAME, name);
-		nla_put_u32(msg, IPCON_ATTR_SRV_GROUP, group);
-
-		ret = ipcon_send_msg(iph, msg);
-		nlmsg_free(msg);
-		if (ret)
-			break;
-
-		ret = ipcon_rcv_msg(iph, 0, IPCON_SRV_REG, &msg);
-		if (ret < 0)
-			break;
-
-		nlh = nlmsg_hdr(msg);
-		ret = genlmsg_parse(nlh, IPCON_HDR_SIZE, tb, IPCON_ATTR_MAX,
-			ipcon_policy);
-		if (ret < 0) {
-			nlmsg_free(msg);
+		if (iph->srv.name) {
+			ret = -EEXIST;
 			break;
 		}
 
-		group = nla_get_u32(tb[IPCON_ATTR_SRV_GROUP]);
+		iph->srv.name = malloc(IPCON_MAX_SRV_NAME_LEN);
+		if (!iph->srv.name) {
+			ret = -ENOMEM;
+			break;
+		}
 
-		if (empty_grp_slot >= 0)
-			iph->grp[empty_grp_slot].groupid = group;
+		msg = nlmsg_alloc();
+		if (!msg) {
+			ret = -ENOMEM;
+			break;
+		}
 
+		genlmsg_put(msg, 0, 0, iph->ipcon_family,
+				IPCON_HDR_SIZE, 0, IPCON_SRV_REG, 1);
+
+		nla_put_u32(msg, IPCON_ATTR_MSG_TYPE, IPCON_MSG_UNICAST);
+		nla_put_string(msg, IPCON_ATTR_SRV_NAME, name);
+
+		/* Use nlerr to judge sucess or fail */
+		nl_socket_enable_auto_ack(iph->sk);
+
+		ret = ipcon_send_msg(iph, msg);
+
+		nl_socket_disable_auto_ack(iph->sk);
 		nlmsg_free(msg);
 
+		if (!ret)
+			ret = ipcon_rcv_msg(iph, 0, IPCON_SRV_REG, NULL);
 	} while (0);
+
+	if (ret < 0) {
+		if (iph->srv.name) {
+			free(iph->srv.name);
+			iph->srv.name = NULL;
+		}
+	} else {
+		strcpy(iph->srv.name, name);
+	}
+
 	pthread_mutex_unlock(&iph->mutex);
 
 	return ret;
@@ -436,11 +485,58 @@ int ipcon_register_service(IPCON_HANDLER handler, char *name,
  * ipcon_unregister_service
  *
  * Remove service registration. this make service point be an anonymous one.
- *
  */
 
 int ipcon_unregister_service(IPCON_HANDLER handler)
 {
+	int ret = 0;
+	struct ipcon_peer_handler *iph = handler_to_iph(handler);
+	struct nl_msg *msg = NULL;
+
+	if (!iph)
+		return -EINVAL;
+
+	pthread_mutex_lock(&iph->mutex);
+
+	do {
+		if (!iph->srv.name) {
+			ret = -EINVAL;
+			break;
+		}
+
+		msg = nlmsg_alloc();
+		if (!msg) {
+			ret = -ENOMEM;
+			break;
+		}
+
+		genlmsg_put(msg, 0, 0, iph->ipcon_family,
+				IPCON_HDR_SIZE, 0, IPCON_SRV_UNREG, 1);
+
+		nla_put_u32(msg, IPCON_ATTR_MSG_TYPE, IPCON_MSG_UNICAST);
+		nla_put_string(msg, IPCON_ATTR_SRV_NAME, iph->srv.name);
+
+		/* Use nlerr to judge sucess or fail */
+		nl_socket_enable_auto_ack(iph->sk);
+
+		ret = ipcon_send_msg(iph, msg);
+
+		nl_socket_disable_auto_ack(iph->sk);
+		nlmsg_free(msg);
+
+		if (!ret)
+			ret = ipcon_rcv_msg(iph, 0, IPCON_SRV_UNREG, NULL);
+
+		if (!ret) {
+			free(iph->srv.name);
+			iph->srv.name = NULL;
+		}
+
+	} while (0);
+
+	pthread_mutex_unlock(&iph->mutex);
+
+	return ret;
 }
 
 /*
