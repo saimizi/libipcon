@@ -46,7 +46,7 @@ static inline int libnl_error(int error)
 }
 
 struct ipcon_rcv_msg_info {
-	struct ipcon_peer_handler *iph;
+	struct ipcon_channel *ic;
 	__u32 target_port;
 	int target_cmd;
 	struct nl_msg *msg;
@@ -205,12 +205,12 @@ static int valid_msg_cb(struct nl_msg *msg, void *arg)
 	struct genlmsghdr *genlh = nlmsg_data(nlh);
 	struct sockaddr_nl *src_addr;
 
-	if (!irmi || !irmi->iph) {
+	if (!irmi || !irmi->ic) {
 		ipcon_err("valid msg losted for null handler.\n");
 		return -EINVAL;
 	}
 
-	if (nlh->nlmsg_type != irmi->iph->ipcon_family)
+	if (nlh->nlmsg_type != irmi->ic->family)
 		return NL_SKIP;
 
 	nlmsg_get(msg);
@@ -218,7 +218,7 @@ static int valid_msg_cb(struct nl_msg *msg, void *arg)
 	if (rcvmsg_match_cond(msg, irmi->target_port, irmi->target_cmd))
 		irmi->msg = msg;
 	else
-		queue_msg(&irmi->iph->mq, msg);
+		queue_msg(&irmi->ic->mq, msg);
 
 	return NL_OK;
 }
@@ -238,7 +238,7 @@ static int valid_msg_cb(struct nl_msg *msg, void *arg)
  * target_cmd:  receive a specified cmd, a IPCON_ANY_CMD match any command.
  */
 
-static int ipcon_rcv_msg(struct ipcon_peer_handler *iph,
+static int ipcon_rcv_msg(struct ipcon_channel *ic,
 			__u32 target_port, int target_cmd, struct nl_msg **pmsg)
 {
 
@@ -246,28 +246,28 @@ static int ipcon_rcv_msg(struct ipcon_peer_handler *iph,
 	struct nl_msg *msg = NULL;
 	int ret = 0;
 
-	if (!iph)
+	if (!ic)
 		return -EINVAL;
 
-	msg = dequeue_msg_cond(&iph->mq, target_port, target_cmd);
+	msg = dequeue_msg_cond(&ic->mq, target_port, target_cmd);
 	if (msg) {
 		if (pmsg)
 			*pmsg = msg;
 		return 0;
 	}
 
-	irmi.iph = iph;
+	irmi.ic = ic;
 	irmi.target_port = target_port;
 	irmi.target_cmd = target_cmd;
 	irmi.msg = NULL;
 
-	nl_socket_modify_cb(iph->sk,
+	nl_socket_modify_cb(ic->sk,
 			NL_CB_VALID,
 			NL_CB_CUSTOM,
 			valid_msg_cb,
 			(void *)&irmi);
 
-	ret = nl_recvmsgs_default(iph->sk);
+	ret = nl_recvmsgs_default(ic->sk);
 	if (!ret) {
 		/*
 		 * If target message is not received, just return -EAGAIN to
@@ -291,21 +291,92 @@ static int ipcon_rcv_msg(struct ipcon_peer_handler *iph,
 	return ret;
 }
 
-static int ipcon_send_msg(struct ipcon_peer_handler *iph, struct nl_msg *msg)
+static int ipcon_send_msg(struct ipcon_channel *ic, struct nl_msg *msg,
+				int need_ack)
 {
 	int ret = 0;
 
-	if (!iph)
+	if (!ic || !ic->sk || !msg)
 		return -EINVAL;
 
-	ret = nl_send_auto(iph->sk, msg);
+	if (need_ack)
+		nl_socket_enable_auto_ack(ic->sk);
+
+	ret = nl_send_auto(ic->sk, msg);
 	if (ret >= 0)
 		ret = 0;
 	else
 		ret = libnl_error(ret);
 
+	nl_socket_disable_auto_ack(ic->sk);
+
 	return ret;
 }
+
+
+static inline int ipcon_chan_init(struct ipcon_channel *ic)
+{
+	int ret = 0;
+	pthread_mutexattr_t mtxAttr;
+
+	if (!ic)
+		return -EINVAL;
+
+	ret = pthread_mutexattr_init(&mtxAttr);
+	if (ret)
+		return ret;
+
+#ifdef __DEBUG__
+	ret = pthread_mutexattr_settype(&mtxAttr, PTHREAD_MUTEX_ERRORCHECK);
+#else
+	ret = pthread_mutexattr_settype(&mtxAttr, PTHREAD_MUTEX_NORMAL);
+#endif
+	if (ret)
+		return ret;
+
+	ret = pthread_mutex_init(&ic->mutex, &mtxAttr);
+	if (ret)
+		return ret;
+
+	ic->mq = NULL;
+	ic->family = 0;
+
+	ic->sk = nl_socket_alloc();
+	if (!ic->sk) {
+		pthread_mutex_destroy(&ic->mutex);
+		return -ENOMEM;
+	}
+
+	ret = genl_connect(ic->sk);
+	if (ret < 0) {
+		pthread_mutex_destroy(&ic->mutex);
+		nl_socket_free(ic->sk);
+	}
+
+	ic->port = nl_socket_get_local_port(ic->sk);
+
+	return ret;
+}
+
+static inline void ipcon_chan_destory(struct ipcon_channel *ic)
+{
+	if (!ic)
+		return;
+
+	nl_socket_free(ic->sk);
+	if (ic->mq) {
+		struct nl_msg *msg = NULL;
+
+		do {
+			msg = dequeue_msg(&ic->mq);
+			nlmsg_free(msg);
+		} while (msg);
+
+		ic->mq = NULL;
+	}
+	ic->family = 0;
+	pthread_mutex_destroy(&ic->mutex);
+};
 
 /*
  * ipcon_create_handler
@@ -318,28 +389,13 @@ IPCON_HANDLER ipcon_create_handler(void)
 	int gi = 0;
 	int ret = 0;
 
-	pthread_mutexattr_t mtxAttr;
-
-	if (pthread_mutexattr_init(&mtxAttr))
-		return NULL;
-
-#ifdef __DEBUG__
-	if (pthread_mutexattr_settype(&mtxAttr,
-				PTHREAD_MUTEX_ERRORCHECK))
-		return NULL;
-#else
-	if (pthread_mutexattr_settype(&mtxAttr,
-				PTHREAD_MUTEX_NORMAL))
-		return NULL;
-#endif
-
-
 	iph = malloc(sizeof(*iph));
 	if (!iph)
 		return NULL;
 
 	do {
 		int i;
+		int family;
 
 		for (i = 0; i < IPCON_MAX_USR_GROUP; i++) {
 			iph->grp[i].name = NULL;
@@ -347,34 +403,34 @@ IPCON_HANDLER ipcon_create_handler(void)
 		}
 
 		iph->srv.name = NULL;
-		iph->mq = NULL;
 
-		if (pthread_mutex_init(&iph->mutex, &mtxAttr))
+		if (ipcon_chan_init(&iph->chan))
+			break;
+		ipcon_dbg("Communictaion channel port: %lu.\n",
+				(unsigned long)iph->chan.port);
+
+		if (ipcon_chan_init(&iph->ctrl_chan))
+			break;
+		ipcon_dbg("Ctrl channel port: %lu.\n",
+				(unsigned long)iph->ctrl_chan.port);
+
+		family = genl_ctrl_resolve(iph->ctrl_chan.sk, IPCON_GENL_NAME);
+		if (family < 0)
 			break;
 
-		iph->sk = nl_socket_alloc();
-		if (!iph->sk)
-			break;
-
-		ret = genl_connect(iph->sk);
-		if (ret < 0)
-			break;
-
-		iph->ipcon_family = genl_ctrl_resolve(iph->sk, IPCON_GENL_NAME);
-		if (iph->ipcon_family < 0) {
-			iph->ipcon_family = 0;
-			break;
-		}
+		iph->ctrl_chan.family = iph->chan.family = family;
 
 		/* We don't required a ACK by default */
-		nl_socket_disable_auto_ack(iph->sk);
+		nl_socket_disable_auto_ack(iph->chan.sk);
+		nl_socket_disable_auto_ack(iph->ctrl_chan.sk);
 
 		return iph_to_handler(iph);
 
 	} while (0);
 
-	/* NULL is ok for nl_socket_free() */
-	nl_socket_free(iph->sk);
+	/* NULL is ok for ipcon_chan_destory() */
+	ipcon_chan_destory(&iph->chan);
+	ipcon_chan_destory(&iph->ctrl_chan);
 	free(iph);
 
 	return NULL;
@@ -391,9 +447,9 @@ int ipcon_free_handler(IPCON_HANDLER handler)
 	if (!iph)
 		return;
 
-	pthread_mutex_destroy(&iph->mutex);
+	ipcon_chan_destory(&iph->ctrl_chan);
+	ipcon_chan_destory(&iph->chan);
 
-	close(iph->sk);
 	free(iph);
 }
 
@@ -432,11 +488,9 @@ int ipcon_register_service(IPCON_HANDLER handler, char *name)
 		return -EINVAL;
 
 
-	pthread_mutex_lock(&iph->mutex);
-
+	ipcon_ctrl_lock(iph);
 
 	do {
-
 		if (iph->srv.name) {
 			ret = -EEXIST;
 			break;
@@ -454,22 +508,20 @@ int ipcon_register_service(IPCON_HANDLER handler, char *name)
 			break;
 		}
 
-		genlmsg_put(msg, 0, 0, iph->ipcon_family,
-				IPCON_HDR_SIZE, 0, IPCON_SRV_REG, 1);
+		genlmsg_put(msg, 0, 0, iph->ctrl_chan.family, IPCON_HDR_SIZE,
+				0, IPCON_SRV_REG, 1);
 
 		nla_put_u32(msg, IPCON_ATTR_MSG_TYPE, IPCON_MSG_UNICAST);
+		nla_put_u32(msg, IPCON_ATTR_PORT, iph->chan.port);
 		nla_put_string(msg, IPCON_ATTR_SRV_NAME, name);
 
-		/* Use nlerr to judge sucess or fail */
-		nl_socket_enable_auto_ack(iph->sk);
 
-		ret = ipcon_send_msg(iph, msg);
-
-		nl_socket_disable_auto_ack(iph->sk);
+		ret = ipcon_send_msg(&iph->ctrl_chan, msg, 1);
 		nlmsg_free(msg);
 
 		if (!ret)
-			ret = ipcon_rcv_msg(iph, 0, IPCON_SRV_REG, NULL);
+			ret = ipcon_rcv_msg(&iph->ctrl_chan,
+					0, IPCON_SRV_REG, NULL);
 	} while (0);
 
 	if (!ret) {
@@ -481,7 +533,7 @@ int ipcon_register_service(IPCON_HANDLER handler, char *name)
 		}
 	}
 
-	pthread_mutex_unlock(&iph->mutex);
+	ipcon_ctrl_unlock(iph);
 
 	return ret;
 }
@@ -502,7 +554,7 @@ int ipcon_unregister_service(IPCON_HANDLER handler)
 	if (!iph)
 		return -EINVAL;
 
-	pthread_mutex_lock(&iph->mutex);
+	ipcon_ctrl_lock(iph);
 
 	do {
 		if (!iph->srv.name) {
@@ -516,22 +568,18 @@ int ipcon_unregister_service(IPCON_HANDLER handler)
 			break;
 		}
 
-		genlmsg_put(msg, 0, 0, iph->ipcon_family,
+		genlmsg_put(msg, 0, 0, iph->ctrl_chan.family,
 				IPCON_HDR_SIZE, 0, IPCON_SRV_UNREG, 1);
-
 		nla_put_u32(msg, IPCON_ATTR_MSG_TYPE, IPCON_MSG_UNICAST);
 		nla_put_string(msg, IPCON_ATTR_SRV_NAME, iph->srv.name);
 
-		/* Use nlerr to judge sucess or fail */
-		nl_socket_enable_auto_ack(iph->sk);
 
-		ret = ipcon_send_msg(iph, msg);
-
-		nl_socket_disable_auto_ack(iph->sk);
+		ret = ipcon_send_msg(&iph->ctrl_chan, msg, 1);
 		nlmsg_free(msg);
 
 		if (!ret)
-			ret = ipcon_rcv_msg(iph, 0, IPCON_SRV_UNREG, NULL);
+			ret = ipcon_rcv_msg(&iph->ctrl_chan,
+						0, IPCON_SRV_UNREG, NULL);
 
 		if (!ret) {
 			free(iph->srv.name);
@@ -540,7 +588,7 @@ int ipcon_unregister_service(IPCON_HANDLER handler)
 
 	} while (0);
 
-	pthread_mutex_unlock(&iph->mutex);
+	ipcon_ctrl_unlock(iph);
 
 	return ret;
 }
@@ -573,7 +621,7 @@ int ipcon_find_service(IPCON_HANDLER handler, char *name, __u32 *srv_port)
 		return -EINVAL;
 
 
-	pthread_mutex_lock(&iph->mutex);
+	ipcon_ctrl_lock(iph);
 	do {
 
 		msg = nlmsg_alloc();
@@ -582,13 +630,13 @@ int ipcon_find_service(IPCON_HANDLER handler, char *name, __u32 *srv_port)
 			break;
 		}
 
-		genlmsg_put(msg, 0, 0, iph->ipcon_family,
+		genlmsg_put(msg, 0, 0, iph->ctrl_chan.family,
 				IPCON_HDR_SIZE, 0, IPCON_SRV_RESLOVE, 1);
 
 		nla_put_u32(msg, IPCON_ATTR_MSG_TYPE, IPCON_MSG_UNICAST);
 		nla_put_string(msg, IPCON_ATTR_SRV_NAME, name);
 
-		ret = ipcon_send_msg(iph, msg);
+		ret = ipcon_send_msg(&iph->ctrl_chan, msg, 0);
 		nlmsg_free(msg);
 
 		if (ret < 0) {
@@ -603,15 +651,21 @@ int ipcon_find_service(IPCON_HANDLER handler, char *name, __u32 *srv_port)
 		 * IPCON_ATTR_PORT, if service not found, IPCON_ATTR_PORT will
 		 * not exist.
 		 */
-		ret = ipcon_rcv_msg(iph, 0, IPCON_SRV_RESLOVE, &msg);
+		ret = ipcon_rcv_msg(&iph->ctrl_chan,
+				0,
+				IPCON_SRV_RESLOVE,
+				&msg);
 		if (ret < 0) {
 			ipcon_err("IPCON_SRV_RESLOVE response failed.\n");
 			break;
 		}
 
 		nlh = nlmsg_hdr(msg);
-		ret = genlmsg_parse(nlh, IPCON_HDR_SIZE, tb, IPCON_ATTR_MAX,
-					ipcon_policy);
+		ret = genlmsg_parse(nlh,
+				IPCON_HDR_SIZE,
+				tb,
+				IPCON_ATTR_MAX,
+				ipcon_policy);
 
 		if (ret) {
 			ret = libnl_error(ret);
@@ -629,7 +683,7 @@ int ipcon_find_service(IPCON_HANDLER handler, char *name, __u32 *srv_port)
 
 	} while (0);
 
-	pthread_mutex_unlock(&iph->mutex);
+	ipcon_ctrl_unlock(iph);
 
 	ipcon_dbg("%s exit with %d\n", __func__, ret);
 
