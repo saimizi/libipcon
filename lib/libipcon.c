@@ -553,9 +553,87 @@ int ipcon_unregister_service(IPCON_HANDLER handler)
  * kernel, queue it into the message queue.
  *
  */
-int ipcon_find_service(IPCON_HANDLER handler, char *name, __u32 *srv_port,
-		unsigned int *group)
+int ipcon_find_service(IPCON_HANDLER handler, char *name, __u32 *srv_port)
 {
+	struct ipcon_peer_handler *iph = handler_to_iph(handler);
+	void *hdr = NULL;
+	int ret = 0;
+	int srv_name_len;
+	struct nlmsghdr *nlh = NULL;
+	struct nl_msg *msg = NULL;
+	struct nlattr *tb[NUM_IPCON_ATTR];
+
+	ipcon_dbg("%s enter.\n", __func__);
+
+	if (!iph || !name)
+		return -EINVAL;
+
+	srv_name_len = (int)strlen(name);
+	if (!srv_name_len || srv_name_len > IPCON_MAX_SRV_NAME_LEN)
+		return -EINVAL;
+
+
+	pthread_mutex_lock(&iph->mutex);
+	do {
+
+		msg = nlmsg_alloc();
+		if (!msg) {
+			ret = -ENOMEM;
+			break;
+		}
+
+		genlmsg_put(msg, 0, 0, iph->ipcon_family,
+				IPCON_HDR_SIZE, 0, IPCON_SRV_RESLOVE, 1);
+
+		nla_put_u32(msg, IPCON_ATTR_MSG_TYPE, IPCON_MSG_UNICAST);
+		nla_put_string(msg, IPCON_ATTR_SRV_NAME, name);
+
+		ret = ipcon_send_msg(iph, msg);
+		nlmsg_free(msg);
+
+		if (ret < 0) {
+			ipcon_err("IPCON_SRV_RESLOVE cmd failed.\n");
+			break;
+		}
+
+		/*
+		 * IPCON_SRV_RESLOVE command is sent without NLM_ACK flag.
+		 * there will not be nlerror come if no error happens.
+		 * if service found, a reply message with portid set in
+		 * IPCON_ATTR_PORT, if service not found, IPCON_ATTR_PORT will
+		 * not exist.
+		 */
+		ret = ipcon_rcv_msg(iph, 0, IPCON_SRV_RESLOVE, &msg);
+		if (ret < 0) {
+			ipcon_err("IPCON_SRV_RESLOVE response failed.\n");
+			break;
+		}
+
+		nlh = nlmsg_hdr(msg);
+		ret = genlmsg_parse(nlh, IPCON_HDR_SIZE, tb, IPCON_ATTR_MAX,
+					ipcon_policy);
+
+		if (ret) {
+			ret = libnl_error(ret);
+			ipcon_dbg("%s msg parse error with%d\n", __func__, ret);
+			break;
+		}
+
+		if (tb[IPCON_ATTR_PORT])
+			*srv_port = nla_get_u32(tb[IPCON_ATTR_PORT]);
+		else
+			ret = -ENOENT;
+
+
+		nlmsg_free(msg);
+
+	} while (0);
+
+	pthread_mutex_unlock(&iph->mutex);
+
+	ipcon_dbg("%s exit with %d\n", __func__, ret);
+
+	return ret;
 }
 
 /*

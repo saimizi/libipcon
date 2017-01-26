@@ -1,4 +1,4 @@
-bin_PROGRAMS = ipcon_test ipcon_server
+bin_PROGRAMS = ipcon_test ipcon_server ipcon_sender
 
 common_cflags = -g -O2 -Wall \
 		-I ${top_builddir}/driver/ \
@@ -16,6 +16,11 @@ ipcon_server_SOURCES = ipcon_server.c
 ipcon_server_CFLAGS =$(common_cflags)
 ipcon_server_LDFLAGS= -L${top_builddir}/lib/.libs
 ipcon_server_LDADD = $(common_ldflags) -lipcon
+
+ipcon_sender_SOURCES = ipcon_sender.c
+ipcon_sender_CFLAGS =$(common_cflags)
+ipcon_sender_LDFLAGS= -L${top_builddir}/lib/.libs
+ipcon_sender_LDADD = $(common_ldflags) -lipcon
 
 
 AM_CFLAGS = -g -O2 -Wall

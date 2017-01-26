@@ -12,20 +12,20 @@
 #include "libipcon.h"
 
 #define ipcon_dbg(fmt, ...) \
-	fprintf(stderr, "[ipcon_server] Debug: "fmt, ##__VA_ARGS__)
+	fprintf(stderr, "[ipcon_sender] Debug: "fmt, ##__VA_ARGS__)
 #define ipcon_info(fmt, ...) \
-	fprintf(stderr, "[ipcon_server] Info: "fmt, ##__VA_ARGS__)
+	fprintf(stderr, "[ipcon_sender] Info: "fmt, ##__VA_ARGS__)
 #define ipcon_err(fmt, ...) \
-	fprintf(stderr, "[ipcon_server] Error: "fmt, ##__VA_ARGS__)
+	fprintf(stderr, "[ipcon_sender] Error: "fmt, ##__VA_ARGS__)
 
 #define srv_name	"ipcon_server"
+__u32 srv_port;
 
 int main(int argc, char *argv[])
 {
 
 	int ret = 0;
 	IPCON_HANDLER	handler;
-	int should_quit = 0;
 
 	handler = ipcon_create_handler();
 	if (!handler) {
@@ -34,25 +34,17 @@ int main(int argc, char *argv[])
 	}
 
 	do {
-		ret = ipcon_register_service(handler, srv_name);
+		ret = ipcon_find_service(handler, srv_name, &srv_port);
 		if (ret < 0) {
-			ipcon_err("Failed to register service: %s (%d)\n",
+			if (ret == -ENOENT)
+				ipcon_info("Service %s not found.\n", srv_name);
+			else
+				ipcon_err("Failed to find service: %s (%d)\n",
 					strerror(-ret), -ret);
-			break;
+		} else {
+				ipcon_info("Service %s is found at %lu.\n",
+					srv_name, (unsigned long)srv_port);
 		}
-
-		ipcon_info("Register service %s succeed.\n", srv_name);
-
-		while (!should_quit)
-			sleep(1);
-
-		ret = ipcon_unregister_service(handler);
-		if (ret < 0) {
-			ipcon_err("Failed to unregister service: %s (%d)\n",
-					strerror(-ret), -ret);
-			break;
-		}
-		ipcon_info("Unregister service %s succeed.\n", srv_name);
 
 	} while (0);
 
