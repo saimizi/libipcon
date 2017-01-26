@@ -12,6 +12,7 @@
 #include <netlink/genl/ctrl.h>
 #include <pthread.h>
 
+#include "libipcon_dbg.h"
 #include "libipcon_priv.h"
 
 /*
@@ -338,13 +339,15 @@ IPCON_HANDLER ipcon_create_handler(void)
 		return NULL;
 
 	do {
+		int i;
 
-		for (gi = 0; gi < IPCON_MAX_USR_GROUP; gi++) {
-			iph->grp[gi].groupid = 0;
-			iph->grp[gi].name[0] = '\0';
+		for (i = 0; i < IPCON_MAX_USR_GROUP; i++) {
+			iph->grp[i].name = NULL;
+			iph->grp[i].groupid = IPCON_NO_GROUP;
 		}
 
-		iph->srv.name[0] = '\0';
+		iph->srv.name = NULL;
+		iph->mq = NULL;
 
 		if (pthread_mutex_init(&iph->mutex, &mtxAttr))
 			break;
@@ -428,9 +431,12 @@ int ipcon_register_service(IPCON_HANDLER handler, char *name)
 	if (!srv_name_len || srv_name_len > IPCON_MAX_SRV_NAME_LEN)
 		return -EINVAL;
 
+
 	pthread_mutex_lock(&iph->mutex);
 
+
 	do {
+
 		if (iph->srv.name) {
 			ret = -EEXIST;
 			break;
@@ -466,13 +472,13 @@ int ipcon_register_service(IPCON_HANDLER handler, char *name)
 			ret = ipcon_rcv_msg(iph, 0, IPCON_SRV_REG, NULL);
 	} while (0);
 
-	if (ret < 0) {
-		if (iph->srv.name) {
+	if (!ret) {
+		strcpy(iph->srv.name, name);
+	} else {
+		if (iph->srv.name && (ret != -EEXIST)) {
 			free(iph->srv.name);
 			iph->srv.name = NULL;
 		}
-	} else {
-		strcpy(iph->srv.name, name);
 	}
 
 	pthread_mutex_unlock(&iph->mutex);
