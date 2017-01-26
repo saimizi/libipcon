@@ -1,4 +1,4 @@
-bin_PROGRAMS = ipcon_test ipcon_server ipcon_sender
+bin_PROGRAMS = ipcon_server ipcon_sender
 
 common_cflags = -g -O2 -Wall \
 		-I ${top_builddir}/driver/ \

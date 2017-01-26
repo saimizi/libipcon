@@ -58,8 +58,15 @@ static struct nla_policy ipcon_policy[NUM_IPCON_ATTR] = {
 	[IPCON_ATTR_PORT] = {.type = NLA_U32},
 	[IPCON_ATTR_SRV_NAME] = {.type = NLA_NUL_STRING,
 				.maxlen = IPCON_MAX_SRV_NAME_LEN - 1 },
-	[IPCON_ATTR_SRV_GROUP] = {.type = NLA_U32},
+	[IPCON_ATTR_GROUP] = {.type = NLA_U32},
 	[IPCON_ATTR_DATA] = {.type = NLA_BINARY, .maxlen = IPCON_MAX_MSG_LEN},
+};
+
+static inline void *ipcon_put(struct nl_msg *msg, struct ipcon_channel *ic,
+		int flags, uint8_t cmd)
+{
+	return genlmsg_put(msg, NL_AUTO_PORT, NL_AUTO_SEQ, ic->family,
+			IPCON_HDR_SIZE, flags, cmd, 1);
 };
 
 static int queue_msg(struct ipcon_msg_queue **head, struct nl_msg *msg)
@@ -291,10 +298,11 @@ static int ipcon_rcv_msg(struct ipcon_channel *ic,
 	return ret;
 }
 
-static int ipcon_send_msg(struct ipcon_channel *ic, struct nl_msg *msg,
-				int need_ack)
+static int ipcon_send_msg(struct ipcon_channel *ic, __u32 port,
+			struct nl_msg *msg, int need_ack)
 {
 	int ret = 0;
+	uint32_t  old_peer_port;
 
 	if (!ic || !ic->sk || !msg)
 		return -EINVAL;
@@ -302,7 +310,11 @@ static int ipcon_send_msg(struct ipcon_channel *ic, struct nl_msg *msg,
 	if (need_ack)
 		nl_socket_enable_auto_ack(ic->sk);
 
+	old_peer_port = nl_socket_get_peer_port(ic->sk);
+	nl_socket_set_peer_port(ic->sk, port);
 	ret = nl_send_auto(ic->sk, msg);
+	nl_socket_set_peer_port(ic->sk, old_peer_port);
+
 	if (ret >= 0)
 		ret = 0;
 	else
@@ -508,15 +520,13 @@ int ipcon_register_service(IPCON_HANDLER handler, char *name)
 			break;
 		}
 
-		genlmsg_put(msg, 0, 0, iph->ctrl_chan.family, IPCON_HDR_SIZE,
-				0, IPCON_SRV_REG, 1);
-
+		ipcon_put(msg, &iph->ctrl_chan, 0, IPCON_SRV_REG);
 		nla_put_u32(msg, IPCON_ATTR_MSG_TYPE, IPCON_MSG_UNICAST);
 		nla_put_u32(msg, IPCON_ATTR_PORT, iph->chan.port);
 		nla_put_string(msg, IPCON_ATTR_SRV_NAME, name);
 
 
-		ret = ipcon_send_msg(&iph->ctrl_chan, msg, 1);
+		ret = ipcon_send_msg(&iph->ctrl_chan, 0, msg, 1);
 		nlmsg_free(msg);
 
 		if (!ret)
@@ -568,13 +578,12 @@ int ipcon_unregister_service(IPCON_HANDLER handler)
 			break;
 		}
 
-		genlmsg_put(msg, 0, 0, iph->ctrl_chan.family,
-				IPCON_HDR_SIZE, 0, IPCON_SRV_UNREG, 1);
+		ipcon_put(msg, &iph->ctrl_chan, 0, IPCON_SRV_UNREG);
 		nla_put_u32(msg, IPCON_ATTR_MSG_TYPE, IPCON_MSG_UNICAST);
 		nla_put_string(msg, IPCON_ATTR_SRV_NAME, iph->srv.name);
 
 
-		ret = ipcon_send_msg(&iph->ctrl_chan, msg, 1);
+		ret = ipcon_send_msg(&iph->ctrl_chan, 0, msg, 1);
 		nlmsg_free(msg);
 
 		if (!ret)
@@ -630,13 +639,11 @@ int ipcon_find_service(IPCON_HANDLER handler, char *name, __u32 *srv_port)
 			break;
 		}
 
-		genlmsg_put(msg, 0, 0, iph->ctrl_chan.family,
-				IPCON_HDR_SIZE, 0, IPCON_SRV_RESLOVE, 1);
-
+		ipcon_put(msg, &iph->ctrl_chan, 0, IPCON_SRV_RESLOVE);
 		nla_put_u32(msg, IPCON_ATTR_MSG_TYPE, IPCON_MSG_UNICAST);
 		nla_put_string(msg, IPCON_ATTR_SRV_NAME, name);
 
-		ret = ipcon_send_msg(&iph->ctrl_chan, msg, 0);
+		ret = ipcon_send_msg(&iph->ctrl_chan, 0, msg, 0);
 		nlmsg_free(msg);
 
 		if (ret < 0) {
@@ -667,7 +674,7 @@ int ipcon_find_service(IPCON_HANDLER handler, char *name, __u32 *srv_port)
 				IPCON_ATTR_MAX,
 				ipcon_policy);
 
-		if (ret) {
+		if (ret < 0) {
 			ret = libnl_error(ret);
 			ipcon_dbg("%s msg parse error with%d\n", __func__, ret);
 			break;
@@ -704,8 +711,91 @@ int ipcon_find_service(IPCON_HANDLER handler, char *name, __u32 *srv_port)
  */
 
 int ipcon_rcv(IPCON_HANDLER handler, __u32 *port,
-			unsigned int *group, void **buf)
+	unsigned int *group, __u32 *type, void **buf)
 {
+	int ret = 0;
+	struct ipcon_peer_handler *iph = handler_to_iph(handler);
+	struct nl_msg *msg = NULL;
+
+	if (!iph)
+		return -EINVAL;
+
+	ipcon_com_lock(iph);
+	do {
+		struct nlmsghdr *nlh = NULL;
+		struct nlattr *tb[NUM_IPCON_ATTR];
+		int len;
+
+		ret = ipcon_rcv_msg(&iph->chan,
+				IPCON_ANY_PORT,
+				IPCON_USR_MSG,
+				&msg);
+		if (ret < 0)
+			break;
+
+
+		nlh = nlmsg_hdr(msg);
+		ret = genlmsg_parse(nlh,
+				IPCON_HDR_SIZE,
+				tb,
+				IPCON_ATTR_MAX,
+				ipcon_policy);
+
+		if (ret < 0) {
+			ret = libnl_error(ret);
+			break;
+		}
+
+		if (!tb[IPCON_ATTR_MSG_TYPE]) {
+			ret = -EREMOTEIO;
+			break;
+		}
+
+		if (!tb[IPCON_ATTR_DATA]) {
+			ret = -EREMOTEIO;
+			break;
+		}
+
+		*type = nla_get_u32(tb[IPCON_ATTR_MSG_TYPE]);
+		if (*type == IPCON_MSG_UNICAST) {
+
+			if (!tb[IPCON_ATTR_PORT]) {
+				ret = -EREMOTEIO;
+				break;
+			}
+
+			*port = nla_get_u32(tb[IPCON_ATTR_PORT]);
+
+		} else if (*type == IPCON_MSG_MULTICAST) {
+
+			if (!tb[IPCON_ATTR_GROUP]) {
+				ret = -EREMOTEIO;
+				break;
+			}
+
+			*group = nla_get_u32(tb[IPCON_ATTR_GROUP]);
+
+		} else {
+			ret = -EREMOTEIO;
+		}
+
+
+		len = nla_len(tb[IPCON_ATTR_DATA]);
+		*buf = malloc((size_t)len);
+		if (!*buf) {
+			ret = -ENOMEM;
+			break;
+		}
+
+		memcpy(*buf, nla_data(tb[IPCON_ATTR_DATA]), (size_t)len);
+		ret = len;
+
+	} while (0);
+
+	nlmsg_free(msg);
+	ipcon_com_unlock(iph);
+
+	return ret;
 }
 
 /*
@@ -717,6 +807,43 @@ int ipcon_rcv(IPCON_HANDLER handler, __u32 *port,
 int ipcon_send_unicast(IPCON_HANDLER handler, __u32 port,
 				void *buf, size_t size)
 {
+
+	int ret = 0;
+	struct nl_msg *msg = NULL;
+	struct ipcon_peer_handler *iph = handler_to_iph(handler);
+	struct nl_data *nldata;
+
+	if (!iph || (size <= 0) || (size > IPCON_MAX_MSG_LEN))
+		return -EINVAL;
+
+	/* Appli is not permitted to send a msg to kernel */
+	if (!port)
+		return -EINVAL;
+
+	ipcon_com_lock(iph);
+
+	do {
+		msg = nlmsg_alloc();
+		if (!msg) {
+			ret = -ENOMEM;
+			break;
+		}
+
+		ipcon_put(msg, &iph->chan, 0, IPCON_USR_MSG);
+
+		nla_put_u32(msg, IPCON_ATTR_MSG_TYPE, IPCON_MSG_UNICAST);
+		nla_put_u32(msg, IPCON_ATTR_PORT, iph->chan.port);
+		nldata = nl_data_alloc(buf, size);
+		nla_put_data(msg, IPCON_ATTR_DATA, nldata);
+
+		ret = ipcon_send_msg(&iph->chan, port, msg, 0);
+
+	} while (0);
+
+	nlmsg_free(msg);
+	ipcon_com_unlock(iph);
+
+	return ret;
 }
 
 /*

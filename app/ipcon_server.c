@@ -43,8 +43,39 @@ int main(int argc, char *argv[])
 
 		ipcon_info("Register service %s succeed.\n", srv_name);
 
-		while (!should_quit)
-			sleep(1);
+		while (!should_quit) {
+			int len = 0;
+			char *buf = NULL;
+			__u32 port;
+			__u32 group;
+			__u32 type = 0;
+
+			len = ipcon_rcv(handler, &port, &group, &type,
+					(void **)&buf);
+			if (len < 0) {
+				ipcon_err("Rcv mesg failed: %s(%d).\n",
+					strerror(-ret), -ret);
+				continue;
+			}
+
+			if (type == IPCON_NORMAL_MSG)  {
+				ipcon_info("Msg from port %lu: %s.\n",
+					(unsigned long)port, buf);
+
+				if (!strcmp(buf, "bye"))
+					should_quit = 1;
+
+			} else if (type == IPCON_GROUP_MSG) {
+				ipcon_info("Msg from group %lu: %s.\n",
+					(unsigned long)group, buf);
+			} else {
+				ipcon_err("Invalid message type (%lu).\n",
+					(unsigned long)type);
+			}
+
+			free(buf);
+
+		}
 
 		ret = ipcon_unregister_service(handler);
 		if (ret < 0) {

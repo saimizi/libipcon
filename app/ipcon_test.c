@@ -25,7 +25,7 @@ static struct nla_policy ipcon_policy[NUM_IPCON_ATTR] = {
 	[IPCON_ATTR_PORT] = {.type = NLA_U32},
 	[IPCON_ATTR_SRV_NAME] = {.type = NLA_NUL_STRING,
 				.maxlen = IPCON_MAX_SRV_NAME_LEN - 1 },
-	[IPCON_ATTR_SRV_GROUP] = {.type = NLA_U32},
+	[IPCON_ATTR_GROUP] = {.type = NLA_U32},
 	[IPCON_ATTR_DATA] = {.type = NLA_BINARY, .maxlen = IPCON_MAX_MSG_LEN},
 };
 

@@ -42,8 +42,21 @@ int main(int argc, char *argv[])
 				ipcon_err("Failed to find service: %s (%d)\n",
 					strerror(-ret), -ret);
 		} else {
-				ipcon_info("Service %s is found at %lu.\n",
-					srv_name, (unsigned long)srv_port);
+			ipcon_info("Service %s is found at %lu.\n",
+				srv_name, (unsigned long)srv_port);
+
+			if (argv[1]) {
+				ipcon_info("Send %s to server %lu\n", argv[1],
+					(unsigned long)srv_port);
+				ret = ipcon_send_unicast(handler,
+						srv_port,
+						argv[1],
+						strlen(argv[1]) + 1);
+
+				if (ret < 0)
+					ipcon_err("Send msg error: %s(%d)\n.",
+						strerror(-ret), -ret);
+			}
 		}
 
 	} while (0);
