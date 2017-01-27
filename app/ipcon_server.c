@@ -26,6 +26,7 @@ int main(int argc, char *argv[])
 	int ret = 0;
 	IPCON_HANDLER	handler;
 	int should_quit = 0;
+	__u32 ipcon_kevent_grp = 0;
 
 	handler = ipcon_create_handler();
 	if (!handler) {
@@ -34,6 +35,18 @@ int main(int argc, char *argv[])
 	}
 
 	do {
+		ret = ipcon_find_group(handler, IPCON_KERNEL_GROUP_NAME,
+					&ipcon_kevent_grp);
+		if (ret < 0)
+			ipcon_err("Failed to get %s group :%s(%d).\n",
+					IPCON_KERNEL_GROUP_NAME,
+					strerror(-ret),
+					-ret);
+		else
+			ipcon_info("Found %s group :%lu.\n",
+					IPCON_KERNEL_GROUP_NAME,
+					(unsigned long) ipcon_kevent_grp);
+
 		ret = ipcon_register_service(handler, srv_name);
 		if (ret < 0) {
 			ipcon_err("Failed to register service: %s (%d)\n",
@@ -59,15 +72,15 @@ int main(int argc, char *argv[])
 			}
 
 			if (type == IPCON_NORMAL_MSG)  {
-				ipcon_info("Msg from port %lu: %s.\n",
-					(unsigned long)port, buf);
+				ipcon_info("Msg from port %lu: %s. size=%d.\n",
+					(unsigned long)port, buf, len);
 
 				if (!strcmp(buf, "bye"))
 					should_quit = 1;
 
 			} else if (type == IPCON_GROUP_MSG) {
-				ipcon_info("Msg from group %lu: %s.\n",
-					(unsigned long)group, buf);
+				ipcon_info("Msg from group %lu: %s, size=%d.\n",
+					(unsigned long)group, buf, len);
 			} else {
 				ipcon_err("Invalid message type (%lu).\n",
 					(unsigned long)type);

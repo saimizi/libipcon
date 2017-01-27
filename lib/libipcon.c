@@ -59,6 +59,8 @@ static struct nla_policy ipcon_policy[NUM_IPCON_ATTR] = {
 	[IPCON_ATTR_SRV_NAME] = {.type = NLA_NUL_STRING,
 				.maxlen = IPCON_MAX_SRV_NAME_LEN - 1 },
 	[IPCON_ATTR_GROUP] = {.type = NLA_U32},
+	[IPCON_ATTR_GRP_NAME] = {.type = NLA_NUL_STRING,
+				.maxlen = IPCON_MAX_GRP_NAME_LEN - 1 },
 	[IPCON_ATTR_DATA] = {.type = NLA_BINARY, .maxlen = IPCON_MAX_MSG_LEN},
 };
 
@@ -696,6 +698,104 @@ int ipcon_find_service(IPCON_HANDLER handler, char *name, __u32 *srv_port)
 
 	return ret;
 }
+
+/*
+ * ipcon_find_group
+ *
+ * Reslove the information of a service point by name.
+ * If another message is received when waiting for resloving message from
+ * kernel, queue it into the message queue.
+ *
+ */
+int ipcon_find_group(IPCON_HANDLER handler, char *name, __u32 *groupid)
+{
+	struct ipcon_peer_handler *iph = handler_to_iph(handler);
+	void *hdr = NULL;
+	int ret = 0;
+	int srv_name_len;
+	struct nlmsghdr *nlh = NULL;
+	struct nl_msg *msg = NULL;
+	struct nlattr *tb[NUM_IPCON_ATTR];
+
+	ipcon_dbg("%s enter.\n", __func__);
+
+	if (!iph || !name)
+		return -EINVAL;
+
+	srv_name_len = (int)strlen(name);
+	if (!srv_name_len || srv_name_len > IPCON_MAX_GRP_NAME_LEN)
+		return -EINVAL;
+
+
+	ipcon_ctrl_lock(iph);
+	do {
+
+		msg = nlmsg_alloc();
+		if (!msg) {
+			ret = -ENOMEM;
+			break;
+		}
+
+		ipcon_put(msg, &iph->ctrl_chan, 0, IPCON_GRP_RESLOVE);
+		nla_put_u32(msg, IPCON_ATTR_MSG_TYPE, IPCON_MSG_UNICAST);
+		nla_put_string(msg, IPCON_ATTR_GRP_NAME, name);
+
+		ret = ipcon_send_msg(&iph->ctrl_chan, 0, msg, 0);
+		nlmsg_free(msg);
+
+		if (ret < 0) {
+			ipcon_err("IPCON_GRP_RESLOVE cmd failed.\n");
+			break;
+		}
+
+		/*
+		 * IPCON_GRP_RESLOVE command is sent without NLM_ACK flag.
+		 * there will not be nlerror come if no error happens.
+		 * if group found, a reply message with portid set in
+		 * IPCON_ATTR_GROUP, if service not found, IPCON_ATTR_GROUP will
+		 * not exist.
+		 */
+		ret = ipcon_rcv_msg(&iph->ctrl_chan,
+				0,
+				IPCON_GRP_RESLOVE,
+				&msg);
+		if (ret < 0) {
+			ipcon_err("IPCON_GRP_RESLOVE response failed.\n");
+			break;
+		}
+
+		nlh = nlmsg_hdr(msg);
+		ret = genlmsg_parse(nlh,
+				IPCON_HDR_SIZE,
+				tb,
+				IPCON_ATTR_MAX,
+				ipcon_policy);
+
+		if (ret < 0) {
+			ret = libnl_error(ret);
+			ipcon_dbg("%s msg parse error with%d\n", __func__, ret);
+			break;
+		}
+
+		if (tb[IPCON_ATTR_GROUP])
+			*groupid = nla_get_u32(tb[IPCON_ATTR_GROUP]);
+		else
+			ret = -ENOENT;
+
+
+		nlmsg_free(msg);
+
+	} while (0);
+
+	ipcon_ctrl_unlock(iph);
+
+	ipcon_dbg("%s exit with %d\n", __func__, ret);
+
+	return ret;
+}
+
+
+
 
 /*
  * ipcon_rcv
