@@ -6,15 +6,6 @@
 #define IPCON_ANY_CMD	IPCON_CMD_MAX
 #define IPCON_ANY_PORT	0xFFFFFFFF
 
-struct ipcon_grp_info {
-	char *name;
-	__u32 groupid;
-};
-
-struct ipcon_srv_info {
-	char *name;
-};
-
 struct ipcon_msg_queue {
 	struct nl_msg *msg;
 	struct ipcon_msg_queue *next;
@@ -31,8 +22,6 @@ struct ipcon_channel {
 struct ipcon_peer_handler {
 	struct ipcon_channel chan;
 	struct ipcon_channel ctrl_chan;
-	struct ipcon_grp_info grp[IPCON_MAX_USR_GROUP];
-	struct ipcon_srv_info srv;
 };
 
 static inline void ipcon_ctrl_lock(struct ipcon_peer_handler *iph)

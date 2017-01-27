@@ -411,13 +411,6 @@ IPCON_HANDLER ipcon_create_handler(void)
 		int i;
 		int family;
 
-		for (i = 0; i < IPCON_MAX_USR_GROUP; i++) {
-			iph->grp[i].name = NULL;
-			iph->grp[i].groupid = IPCON_NO_GROUP;
-		}
-
-		iph->srv.name = NULL;
-
 		if (ipcon_chan_init(&iph->chan))
 			break;
 		ipcon_dbg("Communictaion channel port: %lu.\n",
@@ -467,17 +460,6 @@ int ipcon_free_handler(IPCON_HANDLER handler)
 	free(iph);
 }
 
-static inline int find_empty_grop_slot(struct ipcon_peer_handler *iph)
-{
-	int i;
-
-	for (i = 0; i < IPCON_MAX_USR_GROUP; i++)
-		if (!iph->grp[i].groupid)
-			return i;
-
-	return -1;
-}
-
 /*
  * ipcon_register_service
  *
@@ -501,21 +483,9 @@ int ipcon_register_service(IPCON_HANDLER handler, char *name)
 	if (!srv_name_len || srv_name_len > IPCON_MAX_SRV_NAME_LEN)
 		return -EINVAL;
 
-
 	ipcon_ctrl_lock(iph);
 
 	do {
-		if (iph->srv.name) {
-			ret = -EEXIST;
-			break;
-		}
-
-		iph->srv.name = malloc(IPCON_MAX_SRV_NAME_LEN);
-		if (!iph->srv.name) {
-			ret = -ENOMEM;
-			break;
-		}
-
 		msg = nlmsg_alloc();
 		if (!msg) {
 			ret = -ENOMEM;
@@ -524,9 +494,10 @@ int ipcon_register_service(IPCON_HANDLER handler, char *name)
 
 		ipcon_put(msg, &iph->ctrl_chan, 0, IPCON_SRV_REG);
 		nla_put_u32(msg, IPCON_ATTR_MSG_TYPE, IPCON_MSG_UNICAST);
+		ipcon_com_lock(iph);
 		nla_put_u32(msg, IPCON_ATTR_PORT, iph->chan.port);
+		ipcon_com_unlock(iph);
 		nla_put_string(msg, IPCON_ATTR_SRV_NAME, name);
-
 
 		ret = ipcon_send_msg(&iph->ctrl_chan, 0, msg, 1);
 		nlmsg_free(msg);
@@ -536,20 +507,54 @@ int ipcon_register_service(IPCON_HANDLER handler, char *name)
 					0, IPCON_SRV_REG, NULL);
 	} while (0);
 
-	if (!ret) {
-		strcpy(iph->srv.name, name);
-	} else {
-		if (iph->srv.name && (ret != -EEXIST)) {
-			free(iph->srv.name);
-			iph->srv.name = NULL;
-		}
-	}
-
 	ipcon_ctrl_unlock(iph);
 
 	return ret;
 }
 
+int ipcon_register_group(IPCON_HANDLER handler, char *name)
+{
+	struct ipcon_peer_handler *iph = handler_to_iph(handler);
+	void *hdr = NULL;
+	int ret = 0;
+	int grp_name_len;
+	struct nlmsghdr *nlh = NULL;
+	struct nl_msg *msg = NULL;
+	struct nlattr *tb[NUM_IPCON_ATTR];
+
+	if (!iph || !name)
+		return -EINVAL;
+
+	grp_name_len = (int)strlen(name);
+	if (!grp_name_len || grp_name_len > IPCON_MAX_GRP_NAME_LEN)
+		return -EINVAL;
+
+
+	ipcon_ctrl_lock(iph);
+
+	do {
+		msg = nlmsg_alloc();
+		if (!msg) {
+			ret = -ENOMEM;
+			break;
+		}
+		ipcon_put(msg, &iph->ctrl_chan, 0, IPCON_GRP_REG);
+		nla_put_u32(msg, IPCON_ATTR_MSG_TYPE, IPCON_MSG_UNICAST);
+		nla_put_u32(msg, IPCON_ATTR_PORT, iph->ctrl_chan.port);
+		nla_put_string(msg, IPCON_ATTR_GRP_NAME, name);
+
+		ret = ipcon_send_msg(&iph->ctrl_chan, 0, msg, 1);
+		nlmsg_free(msg);
+
+		if (!ret)
+			ret = ipcon_rcv_msg(&iph->ctrl_chan,
+					0, IPCON_GRP_REG, NULL);
+	} while (0);
+
+	ipcon_ctrl_unlock(iph);
+
+	return ret;
+}
 
 /*
  * ipcon_unregister_service
@@ -557,23 +562,23 @@ int ipcon_register_service(IPCON_HANDLER handler, char *name)
  * Remove service registration. this make service point be an anonymous one.
  */
 
-int ipcon_unregister_service(IPCON_HANDLER handler)
+int ipcon_unregister_service(IPCON_HANDLER handler, char *name)
 {
 	int ret = 0;
+	int srv_name_len;
 	struct ipcon_peer_handler *iph = handler_to_iph(handler);
 	struct nl_msg *msg = NULL;
 
-	if (!iph)
+	if (!iph || !name)
+		return -EINVAL;
+
+	srv_name_len = (int)strlen(name);
+	if (!srv_name_len || srv_name_len > IPCON_MAX_SRV_NAME_LEN)
 		return -EINVAL;
 
 	ipcon_ctrl_lock(iph);
 
 	do {
-		if (!iph->srv.name) {
-			ret = -EINVAL;
-			break;
-		}
-
 		msg = nlmsg_alloc();
 		if (!msg) {
 			ret = -ENOMEM;
@@ -582,8 +587,7 @@ int ipcon_unregister_service(IPCON_HANDLER handler)
 
 		ipcon_put(msg, &iph->ctrl_chan, 0, IPCON_SRV_UNREG);
 		nla_put_u32(msg, IPCON_ATTR_MSG_TYPE, IPCON_MSG_UNICAST);
-		nla_put_string(msg, IPCON_ATTR_SRV_NAME, iph->srv.name);
-
+		nla_put_string(msg, IPCON_ATTR_SRV_NAME, name);
 
 		ret = ipcon_send_msg(&iph->ctrl_chan, 0, msg, 1);
 		nlmsg_free(msg);
@@ -591,12 +595,6 @@ int ipcon_unregister_service(IPCON_HANDLER handler)
 		if (!ret)
 			ret = ipcon_rcv_msg(&iph->ctrl_chan,
 						0, IPCON_SRV_UNREG, NULL);
-
-		if (!ret) {
-			free(iph->srv.name);
-			iph->srv.name = NULL;
-		}
-
 	} while (0);
 
 	ipcon_ctrl_unlock(iph);
@@ -699,35 +697,19 @@ int ipcon_find_service(IPCON_HANDLER handler, char *name, __u32 *srv_port)
 	return ret;
 }
 
-/*
- * ipcon_find_group
- *
- * Reslove the information of a service point by name.
- * If another message is received when waiting for resloving message from
- * kernel, queue it into the message queue.
- *
- */
-int ipcon_find_group(IPCON_HANDLER handler, char *name, __u32 *groupid)
+static int ipcon_get_group(struct ipcon_peer_handler *iph, char *name,
+		__u32 *group, struct nl_msg **rmsg)
 {
-	struct ipcon_peer_handler *iph = handler_to_iph(handler);
 	void *hdr = NULL;
 	int ret = 0;
 	int srv_name_len;
 	struct nlmsghdr *nlh = NULL;
 	struct nl_msg *msg = NULL;
 	struct nlattr *tb[NUM_IPCON_ATTR];
+	__u32 groupid = 0;
 
 	ipcon_dbg("%s enter.\n", __func__);
 
-	if (!iph || !name)
-		return -EINVAL;
-
-	srv_name_len = (int)strlen(name);
-	if (!srv_name_len || srv_name_len > IPCON_MAX_GRP_NAME_LEN)
-		return -EINVAL;
-
-
-	ipcon_ctrl_lock(iph);
 	do {
 
 		msg = nlmsg_alloc();
@@ -777,13 +759,65 @@ int ipcon_find_group(IPCON_HANDLER handler, char *name, __u32 *groupid)
 			break;
 		}
 
-		if (tb[IPCON_ATTR_GROUP])
-			*groupid = nla_get_u32(tb[IPCON_ATTR_GROUP]);
-		else
+		if (!tb[IPCON_ATTR_GROUP]) {
 			ret = -ENOENT;
+			break;
+		}
 
+		groupid = nla_get_u32(tb[IPCON_ATTR_GROUP]);
 
-		nlmsg_free(msg);
+	} while (0);
+
+	nlmsg_free(msg);
+
+	ipcon_dbg("%s exit with %d\n", __func__, ret);
+
+	return ret;
+}
+
+/*
+ * ipcon_join_group
+ *
+ * Suscribe an existed multicast group.
+ * If a group has not been created, return as error.
+ *
+ * rcv_last_msg:
+ *	if set to non-zero value, the last group message will be queued for
+ *	reading. This is for multicast message that represent a state.
+ */
+int ipcon_join_group(IPCON_HANDLER handler, char *name, int rcv_last_msg)
+{
+	struct ipcon_peer_handler *iph = handler_to_iph(handler);
+	int ret = 0;
+	__u32 groupid = 0;
+	struct nl_msg *msg = NULL;
+	int srv_name_len = 0;
+
+	if (!iph || !name)
+		return -EINVAL;
+
+	srv_name_len = (int)strlen(name);
+	if (!srv_name_len || srv_name_len > IPCON_MAX_GRP_NAME_LEN)
+		return -EINVAL;
+
+	ipcon_ctrl_lock(iph);
+
+	do {
+		ret = ipcon_get_group(iph, name, &groupid, &msg);
+		if (ret < 0)
+			break;
+
+		ipcon_com_lock(iph);
+		ret = nl_socket_add_memberships(iph->chan.sk,
+				(int)groupid, 0);
+		if (msg) {
+			if (rcv_last_msg)
+				queue_msg(&iph->chan.mq, msg);
+			else
+				nlmsg_free(msg);
+		}
+
+		ipcon_com_unlock(iph);
 
 	} while (0);
 
@@ -793,9 +827,6 @@ int ipcon_find_group(IPCON_HANDLER handler, char *name, __u32 *groupid)
 
 	return ret;
 }
-
-
-
 
 /*
  * ipcon_rcv
@@ -959,28 +990,37 @@ int ipcon_send_multicast(IPCON_HANDLER handler, void *buf, size_t size)
 }
 
 /*
- * ipcon_join_group
- *
- * Suscribe an existed multicast group.
- * If a group has not been created, return as error.
- *
- * rcv_last_msg:
- *	if set to non-zero value, the last group message will be queued for
- *	reading. This is for multicast message that represent a state.
- */
-int ipcon_join_group(IPCON_HANDLER handler, unsigned int group,
-			int rcv_last_msg)
-{
-}
-
-/*
  * ipcon_leave_group
  *
  * Unsuscribe a multicast group.
  *
  */
-int ipcon_leave_group(IPCON_HANDLER handler, unsigned int group)
+int ipcon_leave_group(IPCON_HANDLER handler, char *name)
 {
+	struct ipcon_peer_handler *iph = handler_to_iph(handler);
+	int ret = 0;
+	int srv_name_len = 0;
+	__u32 groupid = 0;
+
+	if (!iph || !name)
+		return -EINVAL;
+
+	srv_name_len = (int)strlen(name);
+	if (!srv_name_len || srv_name_len > IPCON_MAX_GRP_NAME_LEN)
+		return -EINVAL;
+
+	ipcon_ctrl_lock(iph);
+
+	do {
+		ret = ipcon_get_group(iph, name, &groupid, NULL);
+		if (ret < 0)
+			break;
+
+		ipcon_com_lock(iph);
+		ret = nl_socket_drop_membership(iph->chan.sk, (int)groupid);
+		ipcon_com_unlock(iph);
+
+	} while (0);
 }
 
 /*
@@ -991,16 +1031,17 @@ int ipcon_leave_group(IPCON_HANDLER handler, unsigned int group)
 
 __u32 ipcon_get_selfport(IPCON_HANDLER handler)
 {
-}
+	struct ipcon_peer_handler *iph = handler_to_iph(handler);
+	__u32 port;
 
-/*
- * ipcon_get_selfsrv
- *
- * Get the information of service registerred by self.
- */
+	if (!iph)
+		return 0;
 
-struct ipcon_srv *ipcon_get_selfsrv(IPCON_HANDLER handler)
-{
+	ipcon_com_lock(iph);
+	port = iph->chan.port;
+	ipcon_com_unlock(iph);
+
+	return port;
 }
 
 /*

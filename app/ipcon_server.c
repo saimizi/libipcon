@@ -26,7 +26,6 @@ int main(int argc, char *argv[])
 	int ret = 0;
 	IPCON_HANDLER	handler;
 	int should_quit = 0;
-	__u32 ipcon_kevent_grp = 0;
 
 	handler = ipcon_create_handler();
 	if (!handler) {
@@ -35,17 +34,15 @@ int main(int argc, char *argv[])
 	}
 
 	do {
-		ret = ipcon_find_group(handler, IPCON_KERNEL_GROUP_NAME,
-					&ipcon_kevent_grp);
+		ret = ipcon_join_group(handler, IPCON_KERNEL_GROUP_NAME, 0);
 		if (ret < 0)
 			ipcon_err("Failed to get %s group :%s(%d).\n",
 					IPCON_KERNEL_GROUP_NAME,
 					strerror(-ret),
 					-ret);
 		else
-			ipcon_info("Found %s group :%lu.\n",
-					IPCON_KERNEL_GROUP_NAME,
-					(unsigned long) ipcon_kevent_grp);
+			ipcon_info("Joined %s group.\n",
+					IPCON_KERNEL_GROUP_NAME);
 
 		ret = ipcon_register_service(handler, srv_name);
 		if (ret < 0) {
@@ -90,7 +87,7 @@ int main(int argc, char *argv[])
 
 		}
 
-		ret = ipcon_unregister_service(handler);
+		ret = ipcon_unregister_service(handler, srv_name);
 		if (ret < 0) {
 			ipcon_err("Failed to unregister service: %s (%d)\n",
 					strerror(-ret), -ret);
