@@ -789,9 +789,9 @@ int ipcon_join_group(IPCON_HANDLER handler, char *name, int rcv_last_msg)
 {
 	struct ipcon_peer_handler *iph = handler_to_iph(handler);
 	int ret = 0;
-	__u32 groupid = 0;
 	struct nl_msg *msg = NULL;
 	int srv_name_len = 0;
+	__u32 groupid = 0;
 
 	if (!iph || !name)
 		return -EINVAL;
@@ -809,7 +809,7 @@ int ipcon_join_group(IPCON_HANDLER handler, char *name, int rcv_last_msg)
 
 		ipcon_com_lock(iph);
 		ret = nl_socket_add_memberships(iph->chan.sk,
-				(int)groupid, 0);
+					(int)groupid, 0);
 		if (msg) {
 			if (rcv_last_msg)
 				queue_msg(&iph->chan.mq, msg);
@@ -823,7 +823,8 @@ int ipcon_join_group(IPCON_HANDLER handler, char *name, int rcv_last_msg)
 
 	ipcon_ctrl_unlock(iph);
 
-	ipcon_dbg("%s exit with %d\n", __func__, ret);
+	if (!ret)
+		ret = (int) groupid;
 
 	return ret;
 }
@@ -995,32 +996,20 @@ int ipcon_send_multicast(IPCON_HANDLER handler, void *buf, size_t size)
  * Unsuscribe a multicast group.
  *
  */
-int ipcon_leave_group(IPCON_HANDLER handler, char *name)
+int ipcon_leave_group(IPCON_HANDLER handler, __u32 groupid)
 {
 	struct ipcon_peer_handler *iph = handler_to_iph(handler);
 	int ret = 0;
-	int srv_name_len = 0;
-	__u32 groupid = 0;
 
-	if (!iph || !name)
+	if (!iph)
 		return -EINVAL;
 
-	srv_name_len = (int)strlen(name);
-	if (!srv_name_len || srv_name_len > IPCON_MAX_GRP_NAME_LEN)
-		return -EINVAL;
+	ipcon_com_lock(iph);
+	ret = nl_socket_drop_membership(iph->chan.sk, (int)groupid);
+	ipcon_com_unlock(iph);
 
-	ipcon_ctrl_lock(iph);
+	return ret;
 
-	do {
-		ret = ipcon_get_group(iph, name, &groupid, NULL);
-		if (ret < 0)
-			break;
-
-		ipcon_com_lock(iph);
-		ret = nl_socket_drop_membership(iph->chan.sk, (int)groupid);
-		ipcon_com_unlock(iph);
-
-	} while (0);
 }
 
 /*
