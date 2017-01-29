@@ -829,6 +829,46 @@ int ipcon_join_group(IPCON_HANDLER handler, char *name, int rcv_last_msg)
 	return ret;
 }
 
+int ipcon_unregister_group(IPCON_HANDLER handler, char *name)
+{
+	int ret = 0;
+	int grp_name_len;
+	struct ipcon_peer_handler *iph = handler_to_iph(handler);
+	struct nl_msg *msg = NULL;
+
+	if (!iph || !name)
+		return -EINVAL;
+
+	grp_name_len = (int)strlen(name);
+	if (!grp_name_len || grp_name_len > IPCON_MAX_GRP_NAME_LEN)
+		return -EINVAL;
+
+	ipcon_ctrl_lock(iph);
+
+	do {
+		msg = nlmsg_alloc();
+		if (!msg) {
+			ret = -ENOMEM;
+			break;
+		}
+
+		ipcon_put(msg, &iph->ctrl_chan, 0, IPCON_GRP_UNREG);
+		nla_put_u32(msg, IPCON_ATTR_MSG_TYPE, IPCON_MSG_UNICAST);
+		nla_put_string(msg, IPCON_ATTR_GRP_NAME, name);
+
+		ret = ipcon_send_msg(&iph->ctrl_chan, 0, msg, 1);
+		nlmsg_free(msg);
+
+		if (!ret)
+			ret = ipcon_rcv_msg(&iph->ctrl_chan,
+						0, IPCON_GRP_UNREG, NULL);
+	} while (0);
+
+	ipcon_ctrl_unlock(iph);
+
+	return ret;
+}
+
 /*
  * ipcon_rcv
  *

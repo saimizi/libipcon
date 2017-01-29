@@ -19,6 +19,8 @@ int ipcon_rcv(IPCON_HANDLER handler, __u32 *port,
 		unsigned int *group, __u32 *type, void **buf);
 int ipcon_send_unicast(IPCON_HANDLER handler, __u32 port,
 				void *buf, size_t size);
+int ipcon_register_group(IPCON_HANDLER handler, char *name);
+int ipcon_unregister_group(IPCON_HANDLER handler, char *name);
 int ipcon_join_group(IPCON_HANDLER handler, char *name, int rcv_last_msg);
 int ipcon_leave_group(IPCON_HANDLER handler, __u32 groupid);
 __u32 ipcon_get_selfport(IPCON_HANDLER handler);
