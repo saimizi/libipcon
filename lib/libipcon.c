@@ -489,7 +489,6 @@ int ipcon_register_service(IPCON_HANDLER handler, char *name)
 	if (!srv_name_len || srv_name_len > IPCON_MAX_SRV_NAME_LEN)
 		return -EINVAL;
 
-	ipcon_ctrl_lock(iph);
 
 	do {
 		msg = nlmsg_alloc();
@@ -505,15 +504,16 @@ int ipcon_register_service(IPCON_HANDLER handler, char *name)
 		ipcon_com_unlock(iph);
 		nla_put_string(msg, IPCON_ATTR_SRV_NAME, name);
 
+		ipcon_ctrl_lock(iph);
 		ret = ipcon_send_msg(&iph->ctrl_chan, 0, msg, 1);
 		nlmsg_free(msg);
 
 		if (!ret)
 			ret = ipcon_rcv_msg(&iph->ctrl_chan,
 					0, IPCON_SRV_REG, NULL);
+		ipcon_ctrl_unlock(iph);
 	} while (0);
 
-	ipcon_ctrl_unlock(iph);
 
 	return ret;
 }
@@ -536,7 +536,6 @@ int ipcon_register_group(IPCON_HANDLER handler, char *name)
 		return -EINVAL;
 
 
-	ipcon_ctrl_lock(iph);
 
 	do {
 		msg = nlmsg_alloc();
@@ -549,15 +548,16 @@ int ipcon_register_group(IPCON_HANDLER handler, char *name)
 		nla_put_u32(msg, IPCON_ATTR_PORT, iph->ctrl_chan.port);
 		nla_put_string(msg, IPCON_ATTR_GRP_NAME, name);
 
+		ipcon_ctrl_lock(iph);
 		ret = ipcon_send_msg(&iph->ctrl_chan, 0, msg, 1);
 		nlmsg_free(msg);
 
 		if (!ret)
 			ret = ipcon_rcv_msg(&iph->ctrl_chan,
 					0, IPCON_GRP_REG, NULL);
+		ipcon_ctrl_unlock(iph);
 	} while (0);
 
-	ipcon_ctrl_unlock(iph);
 
 	return ret;
 }
@@ -582,7 +582,6 @@ int ipcon_unregister_service(IPCON_HANDLER handler, char *name)
 	if (!srv_name_len || srv_name_len > IPCON_MAX_SRV_NAME_LEN)
 		return -EINVAL;
 
-	ipcon_ctrl_lock(iph);
 
 	do {
 		msg = nlmsg_alloc();
@@ -595,15 +594,16 @@ int ipcon_unregister_service(IPCON_HANDLER handler, char *name)
 		nla_put_u32(msg, IPCON_ATTR_MSG_TYPE, IPCON_MSG_UNICAST);
 		nla_put_string(msg, IPCON_ATTR_SRV_NAME, name);
 
+		ipcon_ctrl_lock(iph);
 		ret = ipcon_send_msg(&iph->ctrl_chan, 0, msg, 1);
 		nlmsg_free(msg);
 
 		if (!ret)
 			ret = ipcon_rcv_msg(&iph->ctrl_chan,
 						0, IPCON_SRV_UNREG, NULL);
+		ipcon_ctrl_unlock(iph);
 	} while (0);
 
-	ipcon_ctrl_unlock(iph);
 
 	return ret;
 }
@@ -634,7 +634,6 @@ int ipcon_find_service(IPCON_HANDLER handler, char *name, __u32 *srv_port)
 		return -EINVAL;
 
 
-	ipcon_ctrl_lock(iph);
 	do {
 
 		msg = nlmsg_alloc();
@@ -647,10 +646,12 @@ int ipcon_find_service(IPCON_HANDLER handler, char *name, __u32 *srv_port)
 		nla_put_u32(msg, IPCON_ATTR_MSG_TYPE, IPCON_MSG_UNICAST);
 		nla_put_string(msg, IPCON_ATTR_SRV_NAME, name);
 
+		ipcon_ctrl_lock(iph);
 		ret = ipcon_send_msg(&iph->ctrl_chan, 0, msg, 0);
 		nlmsg_free(msg);
 
 		if (ret < 0) {
+			ipcon_ctrl_unlock(iph);
 			ipcon_err("IPCON_SRV_RESLOVE cmd failed.\n");
 			break;
 		}
@@ -666,6 +667,9 @@ int ipcon_find_service(IPCON_HANDLER handler, char *name, __u32 *srv_port)
 				0,
 				IPCON_SRV_RESLOVE,
 				&msg);
+
+		ipcon_ctrl_unlock(iph);
+
 		if (ret < 0) {
 			ipcon_err("IPCON_SRV_RESLOVE response failed.\n");
 			break;
@@ -694,7 +698,6 @@ int ipcon_find_service(IPCON_HANDLER handler, char *name, __u32 *srv_port)
 
 	} while (0);
 
-	ipcon_ctrl_unlock(iph);
 
 	return ret;
 }
@@ -798,11 +801,11 @@ int ipcon_join_group(IPCON_HANDLER handler, char *name, int rcv_last_msg)
 		return -EINVAL;
 
 	ipcon_ctrl_lock(iph);
-
 	do {
 		struct ipcon_group_info *igi = NULL;
 
 		ret = ipcon_get_group(iph, name, &groupid, &msg);
+
 		if (ret < 0)
 			break;
 
@@ -830,7 +833,6 @@ int ipcon_join_group(IPCON_HANDLER handler, char *name, int rcv_last_msg)
 			iph->grp = igi;
 		}
 
-		ipcon_com_lock(iph);
 		ret = nl_socket_add_memberships(iph->chan.sk,
 					(int)groupid, 0);
 		if (ret < 0) {
@@ -850,13 +852,9 @@ int ipcon_join_group(IPCON_HANDLER handler, char *name, int rcv_last_msg)
 				nlmsg_free(msg);
 		}
 
-		ipcon_com_unlock(iph);
-
-
-
 	} while (0);
-
 	ipcon_ctrl_unlock(iph);
+
 
 	return ret;
 }
@@ -875,7 +873,6 @@ int ipcon_unregister_group(IPCON_HANDLER handler, char *name)
 	if (!grp_name_len || grp_name_len > IPCON_MAX_GRP_NAME_LEN)
 		return -EINVAL;
 
-	ipcon_ctrl_lock(iph);
 
 	do {
 		msg = nlmsg_alloc();
@@ -888,15 +885,16 @@ int ipcon_unregister_group(IPCON_HANDLER handler, char *name)
 		nla_put_u32(msg, IPCON_ATTR_MSG_TYPE, IPCON_MSG_UNICAST);
 		nla_put_string(msg, IPCON_ATTR_GRP_NAME, name);
 
+		ipcon_ctrl_lock(iph);
 		ret = ipcon_send_msg(&iph->ctrl_chan, 0, msg, 1);
 		nlmsg_free(msg);
 
 		if (!ret)
 			ret = ipcon_rcv_msg(&iph->ctrl_chan,
 						0, IPCON_GRP_UNREG, NULL);
+		ipcon_ctrl_unlock(iph);
 	} while (0);
 
-	ipcon_ctrl_unlock(iph);
 
 	return ret;
 }
@@ -911,7 +909,9 @@ int ipcon_unregister_group(IPCON_HANDLER handler, char *name)
  * if there is a message, ipcon_rcv() will return it immediately.
  * Otherwise, block until a message is coming.
  *
- * TODO: Non-block I/O implementation needed.
+ * No lock needed
+ * - no ctrl message will be recevived from the communication channel.
+ * - read/write can be done simultaneously for socket.
  */
 
 int ipcon_rcv(IPCON_HANDLER handler, struct ipcon_msg *im)
@@ -923,7 +923,6 @@ int ipcon_rcv(IPCON_HANDLER handler, struct ipcon_msg *im)
 	if (!iph || !im)
 		return -EINVAL;
 
-	ipcon_com_lock(iph);
 	do {
 		struct nlmsghdr *nlh = NULL;
 		struct nlattr *tb[NUM_IPCON_ATTR];
@@ -990,7 +989,6 @@ int ipcon_rcv(IPCON_HANDLER handler, struct ipcon_msg *im)
 	} while (0);
 
 	nlmsg_free(msg);
-	ipcon_com_unlock(iph);
 
 	return ret;
 }
@@ -1017,8 +1015,6 @@ int ipcon_send_unicast(IPCON_HANDLER handler, __u32 port,
 	if (!port)
 		return -EINVAL;
 
-	ipcon_com_lock(iph);
-
 	do {
 		msg = nlmsg_alloc();
 		if (!msg) {
@@ -1040,7 +1036,6 @@ int ipcon_send_unicast(IPCON_HANDLER handler, __u32 port,
 	} while (0);
 
 	nlmsg_free(msg);
-	ipcon_com_unlock(iph);
 
 	return ret;
 }
@@ -1066,7 +1061,6 @@ int ipcon_send_multicast(IPCON_HANDLER handler, char *name, void *buf,
 	if (strlen(name) > IPCON_MAX_GRP_NAME_LEN)
 		return -EINVAL;
 
-	ipcon_ctrl_lock(iph);
 
 	do {
 		struct nl_msg *msg = NULL;
@@ -1086,16 +1080,17 @@ int ipcon_send_multicast(IPCON_HANDLER handler, char *name, void *buf,
 		nla_put_data(msg, IPCON_ATTR_DATA,
 			(struct nl_data *)&ipcon_data);
 
+		ipcon_ctrl_lock(iph);
 		ret = ipcon_send_msg(&iph->ctrl_chan, 0, msg, 1);
 		nlmsg_free(msg);
 
 		if (!ret)
 			ret = ipcon_rcv_msg(&iph->ctrl_chan, 0,
 					IPCON_MULTICAST_MSG, NULL);
+		ipcon_ctrl_unlock(iph);
 
 	} while (0);
 
-	ipcon_ctrl_unlock(iph);
 
 	return ret;
 }
@@ -1129,10 +1124,7 @@ int ipcon_leave_group(IPCON_HANDLER handler, char *name)
 	if (groupid == -1)
 		return -EINVAL;
 
-	ipcon_com_lock(iph);
 	ret = nl_socket_drop_membership(iph->chan.sk, groupid);
-	ipcon_com_unlock(iph);
-
 	return ret;
 
 }
@@ -1151,11 +1143,7 @@ __u32 ipcon_get_selfport(IPCON_HANDLER handler)
 	if (!iph)
 		return 0;
 
-	ipcon_com_lock(iph);
-	port = iph->chan.port;
-	ipcon_com_unlock(iph);
-
-	return port;
+	return iph->chan.port;
 }
 
 /*
