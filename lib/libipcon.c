@@ -431,6 +431,7 @@ IPCON_HANDLER ipcon_create_handler(void)
 			break;
 
 		iph->ctrl_chan.family = iph->chan.family = family;
+		iph->grp = NULL;
 
 		/* We don't required a ACK by default */
 		nl_socket_disable_auto_ack(iph->chan.sk);
@@ -799,13 +800,49 @@ int ipcon_join_group(IPCON_HANDLER handler, char *name, int rcv_last_msg)
 	ipcon_ctrl_lock(iph);
 
 	do {
+		struct ipcon_group_info *igi = NULL;
+
 		ret = ipcon_get_group(iph, name, &groupid, &msg);
 		if (ret < 0)
 			break;
 
+		if (!iph->grp) {
+			iph->grp = malloc(sizeof(struct ipcon_group_info));
+			if (!iph->grp) {
+				ret = -ENOMEM;
+				break;
+			}
+
+			iph->grp->groupid = groupid;
+			strcpy(iph->grp->name, name);
+			iph->grp->next = NULL;
+		} else {
+
+			igi = malloc(sizeof(*igi));
+			if (!igi) {
+				ret = -ENOMEM;
+				break;
+			}
+
+			igi->groupid = groupid;
+			strcpy(igi->name, name);
+			igi->next = iph->grp;
+			iph->grp = igi;
+		}
+
 		ipcon_com_lock(iph);
 		ret = nl_socket_add_memberships(iph->chan.sk,
 					(int)groupid, 0);
+		if (ret < 0) {
+			if (igi) {
+				iph->grp = igi->next;
+				free(igi);
+			} else {
+				free(iph->grp);
+				iph->grp = NULL;
+			}
+		}
+
 		if (msg) {
 			if (rcv_last_msg)
 				queue_msg(&iph->chan.mq, msg);
@@ -815,12 +852,11 @@ int ipcon_join_group(IPCON_HANDLER handler, char *name, int rcv_last_msg)
 
 		ipcon_com_unlock(iph);
 
+
+
 	} while (0);
 
 	ipcon_ctrl_unlock(iph);
-
-	if (!ret)
-		ret = (int) groupid;
 
 	return ret;
 }
@@ -878,14 +914,13 @@ int ipcon_unregister_group(IPCON_HANDLER handler, char *name)
  * TODO: Non-block I/O implementation needed.
  */
 
-int ipcon_rcv(IPCON_HANDLER handler, __u32 *port,
-	unsigned int *group, __u32 *type, void **buf)
+int ipcon_rcv(IPCON_HANDLER handler, struct ipcon_msg *im)
 {
 	int ret = 0;
 	struct ipcon_peer_handler *iph = handler_to_iph(handler);
 	struct nl_msg *msg = NULL;
 
-	if (!iph)
+	if (!iph || !im)
 		return -EINVAL;
 
 	ipcon_com_lock(iph);
@@ -924,39 +959,33 @@ int ipcon_rcv(IPCON_HANDLER handler, __u32 *port,
 			break;
 		}
 
-		*type = nla_get_u32(tb[IPCON_ATTR_MSG_TYPE]);
-		if (*type == IPCON_MSG_UNICAST) {
+		im->type = nla_get_u32(tb[IPCON_ATTR_MSG_TYPE]);
+		if (im->type == IPCON_MSG_UNICAST) {
 
 			if (!tb[IPCON_ATTR_PORT]) {
 				ret = -EREMOTEIO;
 				break;
 			}
 
-			*port = nla_get_u32(tb[IPCON_ATTR_PORT]);
+			im->port = nla_get_u32(tb[IPCON_ATTR_PORT]);
 
-		} else if (*type == IPCON_MSG_MULTICAST) {
+		} else if (im->type == IPCON_MSG_MULTICAST) {
 
-			if (!tb[IPCON_ATTR_GROUP]) {
+			if (!tb[IPCON_ATTR_GRP_NAME]) {
 				ret = -EREMOTEIO;
 				break;
 			}
 
-			*group = nla_get_u32(tb[IPCON_ATTR_GROUP]);
-
+			strcpy(im->group,
+				nla_get_string(tb[IPCON_ATTR_GRP_NAME]));
 		} else {
 			ret = -EREMOTEIO;
 		}
 
-
-		len = nla_len(tb[IPCON_ATTR_DATA]);
-		*buf = malloc((size_t)len);
-		if (!*buf) {
-			ret = -ENOMEM;
-			break;
-		}
-
-		memcpy(*buf, nla_data(tb[IPCON_ATTR_DATA]), (size_t)len);
-		ret = len;
+		im->len = (__u32) nla_len(tb[IPCON_ATTR_DATA]);
+		memcpy((void *)im->buf,
+			nla_data(tb[IPCON_ATTR_DATA]),
+			(size_t)im->len);
 
 	} while (0);
 
@@ -1077,16 +1106,31 @@ int ipcon_send_multicast(IPCON_HANDLER handler, char *name, void *buf,
  * Unsuscribe a multicast group.
  *
  */
-int ipcon_leave_group(IPCON_HANDLER handler, __u32 groupid)
+int ipcon_leave_group(IPCON_HANDLER handler, char *name)
 {
 	struct ipcon_peer_handler *iph = handler_to_iph(handler);
+	struct ipcon_group_info *igi = NULL;
 	int ret = 0;
+	int groupid = -1;
 
-	if (!iph)
+	if (!iph || !name)
+		return -EINVAL;
+
+	ipcon_ctrl_lock(iph);
+	igi = iph->grp;
+	while (igi) {
+		if (!strcmp(igi->name, name)) {
+			groupid = (int)igi->groupid;
+			break;
+		}
+	}
+	ipcon_ctrl_unlock(iph);
+
+	if (groupid == -1)
 		return -EINVAL;
 
 	ipcon_com_lock(iph);
-	ret = nl_socket_drop_membership(iph->chan.sk, (int)groupid);
+	ret = nl_socket_drop_membership(iph->chan.sk, groupid);
 	ipcon_com_unlock(iph);
 
 	return ret;

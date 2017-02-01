@@ -19,9 +19,16 @@ struct ipcon_channel {
 	pthread_mutex_t mutex;
 };
 
+struct ipcon_group_info {
+	char name[IPCON_MAX_GRP_NAME_LEN];
+	__u32 groupid;
+	struct ipcon_group_info *next;
+};
+
 struct ipcon_peer_handler {
 	struct ipcon_channel chan;
 	struct ipcon_channel ctrl_chan;
+	struct ipcon_group_info *grp;
 };
 
 static inline void ipcon_ctrl_lock(struct ipcon_peer_handler *iph)
