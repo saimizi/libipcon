@@ -19,6 +19,7 @@
 	fprintf(stderr, "[ipcon_server] Error: "fmt, ##__VA_ARGS__)
 
 #define srv_name	"ipcon_server"
+#define grp_name	"str_msg"
 __u32 sender_port;
 
 static void ipcon_kevent(struct ipcon_kevent *ik)
@@ -47,6 +48,26 @@ static int normal_msg_handler(IPCON_HANDLER handler, __u32 port, void *buf,
 	if (!buf)
 		return -EINVAL;
 
+	if (!strcmp(buf, "bye")) {
+		ipcon_send_unicast(handler,
+				port,
+				"bye",
+				strlen("bye") + 1);
+
+		if (sender_port && (port != sender_port))
+			ipcon_send_unicast(handler,
+				sender_port,
+				"bye",
+				strlen("bye") + 1);
+
+		ipcon_send_multicast(handler, grp_name,
+				"bye",
+				strlen("bye") + 1);
+
+
+		return ret;
+	}
+
 	if (!sender_port)
 		return 0;
 
@@ -58,6 +79,11 @@ static int normal_msg_handler(IPCON_HANDLER handler, __u32 port, void *buf,
 				port,
 				"OK",
 				strlen("OK") + 1);
+
+		ret = ipcon_send_multicast(handler, grp_name, buf, len);
+		if (ret < 0)
+			ipcon_err("Failed to send mutlcast message:%s(%d).",
+				strerror(-ret), -ret);
 	}
 
 	return ret;
@@ -99,6 +125,16 @@ int main(int argc, char *argv[])
 
 		ipcon_info("Register service %s succeed.\n", srv_name);
 
+		ret = ipcon_register_group(handler, grp_name);
+		if (ret < 0) {
+			ipcon_err("Failed to register group: %s (%d)\n",
+					strerror(-ret), -ret);
+			ipcon_unregister_service(handler, srv_name);
+			break;
+		}
+
+		ipcon_info("Register group %s succeed.\n", grp_name);
+
 		while (!should_quit) {
 			int len = 0;
 			void *buf = NULL;
@@ -117,23 +153,8 @@ int main(int argc, char *argv[])
 				if (!sender_port)
 					sender_port = port;
 
-				if (!strcmp(buf, "bye")) {
+				if (!strcmp(buf, "bye"))
 					should_quit = 1;
-
-					ipcon_send_unicast(handler,
-						port,
-						"bye",
-						strlen("bye") + 1);
-
-					if (sender_port &&
-						(sender_port != port))
-						ipcon_send_unicast(handler,
-							sender_port,
-							"bye",
-							strlen("bye") + 1);
-					free(buf);
-					continue;
-				}
 
 				normal_msg_handler(handler, port, buf, len);
 
@@ -157,6 +178,14 @@ int main(int argc, char *argv[])
 			break;
 		}
 		ipcon_info("Unregister service %s succeed.\n", srv_name);
+
+		ret = ipcon_unregister_group(handler, grp_name);
+		if (ret < 0) {
+			ipcon_err("Failed to unregister group: %s (%d)\n",
+					strerror(-ret), -ret);
+			break;
+		}
+		ipcon_info("Unregister group %s succeed.\n", grp_name);
 
 	} while (0);
 

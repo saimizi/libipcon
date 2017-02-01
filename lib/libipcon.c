@@ -15,6 +15,11 @@
 #include "libipcon_dbg.h"
 #include "libipcon_priv.h"
 
+struct ipcon_nl_data {
+	size_t	d_size;
+	void	*d_data;
+};
+
 /*
  * Basically libnl error code are not expected.
  * We just want a errno number which is partly destroyed by libnl...
@@ -620,8 +625,6 @@ int ipcon_find_service(IPCON_HANDLER handler, char *name, __u32 *srv_port)
 	struct nl_msg *msg = NULL;
 	struct nlattr *tb[NUM_IPCON_ATTR];
 
-	ipcon_dbg("%s enter.\n", __func__);
-
 	if (!iph || !name)
 		return -EINVAL;
 
@@ -692,8 +695,6 @@ int ipcon_find_service(IPCON_HANDLER handler, char *name, __u32 *srv_port)
 
 	ipcon_ctrl_unlock(iph);
 
-	ipcon_dbg("%s exit with %d\n", __func__, ret);
-
 	return ret;
 }
 
@@ -706,8 +707,6 @@ static int ipcon_get_group(struct ipcon_peer_handler *iph, char *name,
 	struct nlmsghdr *nlh = NULL;
 	struct nl_msg *msg = NULL;
 	struct nlattr *tb[NUM_IPCON_ATTR];
-
-	ipcon_dbg("%s enter.\n", __func__);
 
 	do {
 
@@ -768,8 +767,6 @@ static int ipcon_get_group(struct ipcon_peer_handler *iph, char *name,
 	} while (0);
 
 	nlmsg_free(msg);
-
-	ipcon_dbg("%s exit with %d\n", __func__, ret);
 
 	return ret;
 }
@@ -982,7 +979,7 @@ int ipcon_send_unicast(IPCON_HANDLER handler, __u32 port,
 	int ret = 0;
 	struct nl_msg *msg = NULL;
 	struct ipcon_peer_handler *iph = handler_to_iph(handler);
-	struct nl_data *nldata;
+	struct ipcon_nl_data ipcon_data;
 
 	if (!iph || (size <= 0) || (size > IPCON_MAX_MSG_LEN))
 		return -EINVAL;
@@ -1004,8 +1001,10 @@ int ipcon_send_unicast(IPCON_HANDLER handler, __u32 port,
 
 		nla_put_u32(msg, IPCON_ATTR_MSG_TYPE, IPCON_MSG_UNICAST);
 		nla_put_u32(msg, IPCON_ATTR_PORT, iph->chan.port);
-		nldata = nl_data_alloc(buf, size);
-		nla_put_data(msg, IPCON_ATTR_DATA, nldata);
+		ipcon_data.d_size = size;
+		ipcon_data.d_data = buf;
+		nla_put_data(msg, IPCON_ATTR_DATA,
+			(struct nl_data *)&ipcon_data);
 
 		ret = ipcon_send_msg(&iph->chan, port, msg, 0);
 
@@ -1025,8 +1024,51 @@ int ipcon_send_unicast(IPCON_HANDLER handler, __u32 port,
  *
  */
 
-int ipcon_send_multicast(IPCON_HANDLER handler, void *buf, size_t size)
+int ipcon_send_multicast(IPCON_HANDLER handler, char *name, void *buf,
+			size_t size)
 {
+	struct ipcon_peer_handler *iph = handler_to_iph(handler);
+	int ret = 0;
+	struct ipcon_nl_data ipcon_data;
+
+	if (!iph || !name || !buf)
+		return -EINVAL;
+
+	if (strlen(name) > IPCON_MAX_GRP_NAME_LEN)
+		return -EINVAL;
+
+	ipcon_ctrl_lock(iph);
+
+	do {
+		struct nl_msg *msg = NULL;
+
+		msg = nlmsg_alloc();
+		if (!msg) {
+			ret = -ENOMEM;
+			break;
+		}
+
+		ipcon_put(msg, &iph->ctrl_chan, 0, IPCON_MULTICAST_MSG);
+
+		nla_put_u32(msg, IPCON_ATTR_MSG_TYPE, IPCON_MSG_UNICAST);
+		nla_put_string(msg, IPCON_ATTR_GRP_NAME, name);
+		ipcon_data.d_size = size;
+		ipcon_data.d_data = buf;
+		nla_put_data(msg, IPCON_ATTR_DATA,
+			(struct nl_data *)&ipcon_data);
+
+		ret = ipcon_send_msg(&iph->ctrl_chan, 0, msg, 1);
+		nlmsg_free(msg);
+
+		if (!ret)
+			ret = ipcon_rcv_msg(&iph->ctrl_chan, 0,
+					IPCON_MULTICAST_MSG, NULL);
+
+	} while (0);
+
+	ipcon_ctrl_unlock(iph);
+
+	return ret;
 }
 
 /*
