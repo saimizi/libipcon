@@ -36,7 +36,7 @@ static void ipcon_kevent(IPCON_HANDLER handler, struct ipcon_msg *im)
 	switch (ik->type) {
 	case IPCON_EVENT_GRP_ADD:
 		if (!srv_group_connected && !strcmp(ik->grp.name, grp_name)) {
-			ret = ipcon_join_group(handler, grp_name, 0);
+			ret = ipcon_join_group(handler, grp_name, 1);
 			if (ret < 0) {
 				ipcon_err("Failed to join group %s: %s(%d)\n",
 					grp_name,
@@ -99,7 +99,7 @@ int main(int argc, char *argv[])
 
 		ipcon_info("Joined %s group.\n", IPCON_KERNEL_GROUP_NAME);
 
-		ret = ipcon_join_group(handler, grp_name, 0);
+		ret = ipcon_join_group(handler, grp_name, 1);
 		if (!ret) {
 			srv_group_connected = 1;
 			ipcon_info("Joined %s group.\n", grp_name);

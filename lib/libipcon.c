@@ -67,6 +67,7 @@ static struct nla_policy ipcon_policy[NUM_IPCON_ATTR] = {
 	[IPCON_ATTR_GRP_NAME] = {.type = NLA_NUL_STRING,
 				.maxlen = IPCON_MAX_GRP_NAME_LEN - 1 },
 	[IPCON_ATTR_DATA] = {.type = NLA_BINARY, .maxlen = IPCON_MAX_MSG_LEN},
+	[IPCON_ATTR_FLAG] = {.type = NLA_FLAG},
 };
 
 static inline void *ipcon_put(struct nl_msg *msg, struct ipcon_channel *ic,
@@ -703,7 +704,7 @@ int ipcon_find_service(IPCON_HANDLER handler, char *name, __u32 *srv_port)
 }
 
 static int ipcon_get_group(struct ipcon_peer_handler *iph, char *name,
-		__u32 *groupid, struct nl_msg **rmsg)
+		__u32 *groupid, int rcv_last_msg)
 {
 	void *hdr = NULL;
 	int ret = 0;
@@ -722,10 +723,14 @@ static int ipcon_get_group(struct ipcon_peer_handler *iph, char *name,
 
 		ipcon_put(msg, &iph->ctrl_chan, 0, IPCON_GRP_RESLOVE);
 		nla_put_u32(msg, IPCON_ATTR_MSG_TYPE, IPCON_MSG_UNICAST);
+		nla_put_u32(msg, IPCON_ATTR_PORT, iph->chan.port);
 		nla_put_string(msg, IPCON_ATTR_GRP_NAME, name);
+		if (rcv_last_msg)
+			nla_put_flag(msg, IPCON_ATTR_FLAG);
 
 		ret = ipcon_send_msg(&iph->ctrl_chan, 0, msg, 0);
 		nlmsg_free(msg);
+		msg = NULL;
 
 		if (ret < 0) {
 			ipcon_err("IPCON_GRP_RESLOVE cmd failed.\n");
@@ -744,7 +749,8 @@ static int ipcon_get_group(struct ipcon_peer_handler *iph, char *name,
 				IPCON_GRP_RESLOVE,
 				&msg);
 		if (ret < 0) {
-			ipcon_err("IPCON_GRP_RESLOVE response failed.\n");
+			ipcon_err("IPCON_GRP_RESLOVE fail: %s(%d).\n",
+				strerror(-ret), -ret);
 			break;
 		}
 
@@ -789,7 +795,6 @@ int ipcon_join_group(IPCON_HANDLER handler, char *name, int rcv_last_msg)
 {
 	struct ipcon_peer_handler *iph = handler_to_iph(handler);
 	int ret = 0;
-	struct nl_msg *msg = NULL;
 	int srv_name_len = 0;
 	__u32 groupid = 0;
 
@@ -804,7 +809,7 @@ int ipcon_join_group(IPCON_HANDLER handler, char *name, int rcv_last_msg)
 	do {
 		struct ipcon_group_info *igi = NULL;
 
-		ret = ipcon_get_group(iph, name, &groupid, &msg);
+		ret = ipcon_get_group(iph, name, &groupid, rcv_last_msg);
 
 		if (ret < 0)
 			break;
@@ -843,13 +848,6 @@ int ipcon_join_group(IPCON_HANDLER handler, char *name, int rcv_last_msg)
 				free(iph->grp);
 				iph->grp = NULL;
 			}
-		}
-
-		if (msg) {
-			if (rcv_last_msg)
-				queue_msg(&iph->chan.mq, msg);
-			else
-				nlmsg_free(msg);
 		}
 
 	} while (0);
