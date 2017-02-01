@@ -26,6 +26,7 @@ int main(int argc, char *argv[])
 	int ret = 0;
 	IPCON_HANDLER	handler;
 	int should_quit = 0;
+	int ipcon_kevent_group = 0;
 
 	handler = ipcon_create_handler();
 	if (!handler) {
@@ -34,15 +35,17 @@ int main(int argc, char *argv[])
 	}
 
 	do {
-		ret = ipcon_join_group(handler, IPCON_KERNEL_GROUP_NAME, 0);
-		if (ret < 0)
+		ipcon_kevent_group = ipcon_join_group(handler,
+					IPCON_KERNEL_GROUP_NAME, 0);
+		if (ipcon_kevent_group < 0)
 			ipcon_err("Failed to get %s group :%s(%d).\n",
 					IPCON_KERNEL_GROUP_NAME,
-					strerror(-ret),
-					-ret);
+					strerror(-ipcon_kevent_group),
+					-ipcon_kevent_group);
 		else
-			ipcon_info("Joined %s group.\n",
-					IPCON_KERNEL_GROUP_NAME);
+			ipcon_info("Joined %s group (groupid = %d).\n",
+					IPCON_KERNEL_GROUP_NAME,
+					ipcon_kevent_group);
 
 		ret = ipcon_register_service(handler, srv_name);
 		if (ret < 0) {
@@ -64,7 +67,7 @@ int main(int argc, char *argv[])
 					(void **)&buf);
 			if (len < 0) {
 				ipcon_err("Rcv mesg failed: %s(%d).\n",
-					strerror(-ret), -ret);
+					strerror(-len), -len);
 				continue;
 			}
 

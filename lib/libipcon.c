@@ -698,7 +698,7 @@ int ipcon_find_service(IPCON_HANDLER handler, char *name, __u32 *srv_port)
 }
 
 static int ipcon_get_group(struct ipcon_peer_handler *iph, char *name,
-		__u32 *group, struct nl_msg **rmsg)
+		__u32 *groupid, struct nl_msg **rmsg)
 {
 	void *hdr = NULL;
 	int ret = 0;
@@ -706,7 +706,6 @@ static int ipcon_get_group(struct ipcon_peer_handler *iph, char *name,
 	struct nlmsghdr *nlh = NULL;
 	struct nl_msg *msg = NULL;
 	struct nlattr *tb[NUM_IPCON_ATTR];
-	__u32 groupid = 0;
 
 	ipcon_dbg("%s enter.\n", __func__);
 
@@ -764,7 +763,7 @@ static int ipcon_get_group(struct ipcon_peer_handler *iph, char *name,
 			break;
 		}
 
-		groupid = nla_get_u32(tb[IPCON_ATTR_GROUP]);
+		*groupid = nla_get_u32(tb[IPCON_ATTR_GROUP]);
 
 	} while (0);
 
