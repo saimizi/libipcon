@@ -136,7 +136,7 @@ int main(int argc, char *argv[])
 
 	} while (0);
 
-	ret = ipcon_free_handler(handler);
+	ipcon_free_handler(handler);
 
 	return ret;
 }

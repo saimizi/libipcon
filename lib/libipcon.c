@@ -455,7 +455,7 @@ IPCON_HANDLER ipcon_create_handler(void)
  * ipcon_free_handler
  * Free an ipcon handler created by ipcon_create_handler().
  */
-int ipcon_free_handler(IPCON_HANDLER handler)
+void ipcon_free_handler(IPCON_HANDLER handler)
 {
 	struct ipcon_peer_handler *iph = handler_to_iph(handler);
 
