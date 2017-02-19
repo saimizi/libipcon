@@ -1,6 +1,5 @@
 lib_LTLIBRARIES = libipcon.la
 
-#-Wstrict-aliasing=2 will error (struct sockaddr *) &nl_addr...
 libipcon_la_CPPFLAGS =	-Wextra \
 			-Werror \
 			-Wformat=2 \

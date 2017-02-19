@@ -1,5 +1,5 @@
 AC_PREREQ([2.65])
-AC_INIT([ipcon],0.0.1)
+AC_INIT([ipcon],1.0.0)
 AM_INIT_AUTOMAKE([foreign])
 
 LT_PREREQ([2.2])
