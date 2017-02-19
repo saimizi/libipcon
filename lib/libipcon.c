@@ -1153,4 +1153,10 @@ __u32 ipcon_get_selfport(IPCON_HANDLER handler)
 
 int ipcon_getfd(IPCON_HANDLER handler)
 {
+	struct ipcon_peer_handler *iph = handler_to_iph(handler);
+
+	if (iph)
+		return nl_socket_get_fd(iph->chan.sk);
+
+	return -EBADF;
 }
