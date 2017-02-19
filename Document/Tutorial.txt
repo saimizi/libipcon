@@ -8,8 +8,14 @@ The content of this tutorial are as following:
     2. What IPCON does help for ?
     3. Terms Definition
     4. Architectural Overview
-    5. How to use ?
-       5.1 Configuration and Compiling
+    5. How to use
+	5.1 Configuration and Compiling
+	5.2 Create a peer
+	5.3 Register a service
+	5.4 Register a group
+	5.5 Receive a message
+	5.6 Send a message
+	5.7 "ipcon_kevent" message group
 
 
 1. What IPCON does NOT help for ?
@@ -230,5 +236,503 @@ the IPCON package.
 In a cross compile environment, 
 
    ./autogen.sh
-   ./configure --with-ksrc=<Path to linux kernel> --build=<TARGET_ARCH> --host=<HOST arch>
-   make ARCH=<arch> CROSS_COMPILE=<cross compiler>
+   ./configure --with-ksrc=<PATH TO LINUX KERNEL> \
+	--build=<TARGET ARCH> \
+	--host=<HOST ARCH>
+   make ARCH=<ARCH> \
+	CROSS_COMPILE=<CROSS COMPILER> \
+	INSTALL_MOD_PATH=<ROOTFS PATH>
+
+if configuration and compiling succeed, you will got following being installed.
+
+- ipcon.ko
+- libipcon.so.0.0.0 libipcon.so.0 libipcon.so
+
+5.2 Create a peer
+-------------------------------------------------------------------------------
+
+First of all you need to create an IPCON handler to use IPCON,
+
+#include <stdio.h>
+#include <stdlib.h>
+#include <libipcon.h>
+
+int main (int argc, char *argv[])
+{
+	IPCON_HANDLER	handler;
+
+	handler = ipcon_create_handler();
+	if (!handler) {
+		fprintf(stderr, "Failed to create handler\n");
+		return 1;
+	}
+
+	...
+}
+
+ipcon_create_handler() initialize the internal management structure and connects
+to IPCON driver. As you may find in libipcon.h, IPCON_HANDLER is defined as an
+"void *" pointer. When succeed, ipcon_create_handler() returns a handler other
+than NULL. if failed (such that ipcon.ko has not been insmoded) it returns NULL
+instead.
+
+To free an IPCON handler, just call
+	ipcon_free_handler(handler);
+
+"handler" is the IPCON handler created by ipcon_create_handler();
+
+
+5.3 Register a service
+-------------------------------------------------------------------------------
+
+In order to communicate, the partner process needs to know the port number of
+each other. The basic idea in IPCON is that one process (for example, a process
+named "Server") register its peer as a service. That is, specify a name to its
+peer so that the other process (for example, a process named "Client") may
+reslove this name to get its port number of it. A service can be registerred by
+simply calling ipcon_register_service() API.
+
+#define service_name	"ServerX"
+
+ret = ipcon_register_service(handler, service_name);
+if (ret < 0) {
+	fprintf(stderr, "Oh, my god, failed to register a serveice: %s (%d)\n",
+		strerror(-ret), -ret);
+	return ret;
+}
+
+The example code above shows how to register a service "ServerX". "handler" here
+is the IPCON handler created by ipcon_create_handler(). The service name should
+be less than IPCON_MAX_SRV_NAME_LEN (32 byte) and be unique in system wide. When
+succeed ipcon_register_service() will return 0 and a negative number when
+failed.
+
+Note:
+    As a rule, when libipcon APIs return a negative error code, it will be a
+    negative errno code. For example, if a service with the same name has been
+    registerred before, ipcon_register_service() will return -EEXIST.
+
+One peer may be registerred as multiple services. That is, a peer can be
+registerred with different names. This may be useful when you want to use a
+service peer to manage different groups of "clients". Because IPCON does NOT
+provide any mechanism to distinguish the message from different "services" (see
+ipcon_rcv() below), it is not easy to use it at present (Maybe improved later? I
+don't know...).
+
+To unregister a service, just call
+	ipcon_unregister_service(handler, service_name);
+
+Unregisterring a service does NOT close the peer, just remove the name attached
+to it. so the port number can still be used by the communication. This make it
+possible for a peer to publish its name to wait for being discoverred by the
+specific partner and stop the name publishing after being discovrered.
+
+When a process registers its service peer, the other processes (named process
+Client) may get its port number by calling ipcon_find_service() to reslove the
+service name.
+
+
+__u32 srv_port;
+ret = ipcon_find_service(handler, "ServerX", &srv_port);
+if (!ret)
+	fprintf(stderr, "Found service %s@%lu\n",
+			"ServerX", (unsigned long)srv_port);
+
+If the service "ServerX" is found, ipcon_find_service() will return 0 and save
+the port number to srv_port variable. Client process may use this port number to
+send/receive messages to/from the Server process(See 5.5 Receive a message and
+5.6 Send a message).
+
+Note:
+    IPCON does NOT do any authentication on message transferring between user
+    processes. It is the responsibilty of the user processes to do judge whether
+    a communication partner is an valid one or not.
+
+If the specified service is not found, ipcon_find_service() will not be blocked
+and return an negative error code (-ENOENT) imediately. You may doubt that since
+ipcon_find_service() is non-blocked, if the service "ServiceX" is registerred
+after the Client's ipcon_find_service() call, should I do a while loop here to
+wait for it? Of courcse, that is OK, but not good. You may use IPCON driver's
+"ipcon_kevent" group message to detect service registeration asynchrously which
+will be described later in this tutorial.
+
+
+5.4 Register a group
+-------------------------------------------------------------------------------
+
+As described in "2. What IPCON does help for ?", IPCON supports multicast
+messages, which is a kind of One-to-Many communication. A user process (for
+example, named "Provider") may setup its message group by calling
+ipcon_register_group() API. Just like a service, a group is also identified by a
+system-wide unique name (Ofcourse it maybe same to a service name if you
+want...).  The maximum lenght of the group name is 16 byte.
+
+
+#define group_name "GroupX"
+ret = ipcon_register_group(handler, group_name);
+if (ret < 0)
+	fprintf(stderr, "Failed to register group: %s (%d)\n",
+		strerror(-ret), -ret);
+
+
+ipcon_register_group() will return 0 if succeeds and return a negative errno
+number if failed.
+
+When a Provider decides to destroy a group it created, just call
+ipcon_unregister_group().
+
+	ipcon_unregister_group(handler, group_name);
+
+Any process (named a "Subscriber") who is willing to receive the messages from
+this group may just call ipcon_join_group().
+
+ret = ipcon_join_group(handler, "GroupX", true);
+if (!ret)
+	fprintf(stderr, "Joined %s group.\n", "GroupX");
+
+
+The synopsis of ipcon_join_group() is as following:
+
+
+	int ipcon_join_group(IPCON_HANDLER handler, char *name, int rcv_last_msg);
+
+The "handler" is the IPCON handler created by ipcon_create_handler() and "name"
+is the name of the group which is supposed to join. The last bool parameter
+"rcv_last_msg" specify that whether Subscriber process is willing to receive the
+last message from this group.
+
+IPCON driver will cache the last group message of every registerred group and
+send (replay) it to all subscribers who specify rcv_last_msg as true in calling
+ipcon_join_group(). The reason to do this is to help subscribers to avoid the
+starvation state of a group message that respresent some state information.
+Assume that a Provider process creates a group "USB_EVENT" to inform Subscribers
+of the USB insertion event. A new subscriber may join this group and do
+something when receives a "insert" event and do something else when recevive a
+"remove" event. the codes will be something like following:
+
+
+ret = register_group("USB_EVENT");				// cond 1
+if (ret == REG_OK) {
+	while (!should_quit) {
+		state = receive_from_group("USB_EVENT");	// cond 2
+
+		if (state == "insert") {
+			do_something();
+			continue;
+		} else if (state == "remove") {
+			do_something_else();
+			continue;
+		}
+
+		do_bad_state_error();
+		should_quit = 1;
+	};
+}
+
+If USB insertion is after cond 1, things will go well. but if USB insertion is
+done before cond 1, this piece of codes will miss the "insert" event completely
+and will never run do_something() until next "USB inserting" action. This is a
+kind of state starvation. This problem can be relieved by using "rcv_last_msg"
+parameter of ipcon_join_group(). In this case, IPCON driver will replay the last
+"insert" or "remove" message to Subscriber soon after it joined "USB_EVENT"
+message group. That is, the present state of USB insertion is being reproduced
+to the Subscriber.
+
+When a Subscriber decides not to subscribe a group anymore, just call
+ipcon_leave_group();
+
+	ipcon_leave_group(handler, group_name);
+
+Note:
+    When a Provider unregisters a group, Subscriber should detect it and call
+    ipcon_leave_group() explicitly to unsubscribe the message. IPCON driver's
+    "ipcon_kevent" group message can be used to detect group unregister event.
+
+
+5.5 Receive a message
+-------------------------------------------------------------------------------
+
+As described above, we may receive messages from a peer or a group. To identify
+the source of the message, the following information is needed when a message is
+received.
+
+1. Is this message from a peer? or from a group that we subscribed?
+2. If the message is from a peer, what is the port number of peer who send it?
+3. If the message is from a group, since we may subscribe many groups, which
+   group this message comes from ?
+4. What is the size of message data? and where to get the data?
+
+In order to get all information described above, the receved message is
+represented in following structure.
+
+struct ipcon_msg {
+	__u32 type;
+	char group[IPCON_MAX_GRP_NAME_LEN];
+	__u32 port;
+	char buf[IPCON_MAX_MSG_LEN];
+	__u32 len;
+};
+
+- type
+  Indicate the type of received message.
+  IPCON_NORMAL_MSG:	A message from a peer (maybe a service peer or not).
+  IPCON_GROUP_MSG:	A message from a group.
+
+- group
+  Indicate the group name from which the message is sent.
+  This is only valid when type is IPCON_GROUP_MSG.
+
+- port
+  Indicate the message sender's port number.
+  this is only valid when type is IPCON_NORMAL_MSG.
+
+- buf
+  The message data.
+
+- len
+  The length of the message data.
+
+
+libipcon's API ipcon_rcv() is used to receive a message:
+
+	int ipcon_rcv(IPCON_HANDLER handler, struct ipcon_msg *im);
+
+if succeed, ipcon_rcv() saves received data in the buffer specied by "im" and
+return 0. if failed, a negative errno code is returned. Difference from the APIs
+described above, ipcon_rcv() will be blocked if no message is received. so the
+format of receiving a message will be something like following:
+
+
+while (!should_quit) {
+	struct ipcon_msg im;
+
+	/* if no message come, programe will sleep here. */
+	ret = ipcon_rcv(handler, &im);
+	if (ret < 0) {
+		fprintf(stderr, "Receive msg failed: %s(%d)\n",
+				strerror(-ret), -ret);
+		should_quit = 1;
+		continue;
+	}
+
+
+	if (im.type == IPCON_NORMAL_MSG)  {
+		__u32 src_port = im.port;
+
+		/* deal with message from port src_port */
+		...
+		continue;
+	}
+
+	if (im.type == IPCON_GROUP_MSG)  {
+		if (!strcmp(im.group, "GroupX")) {
+			/* deal with message from group "GroupX" */
+			...
+			continue;
+		}
+
+		if (!strcmp(im.group, "GroupY")) {
+			/* deal with message from group "GroupY" */
+			...
+			continue;
+		}
+
+		if (!strcmp(im.group, "GroupZ")) {
+			/* deal with message from group "GroupZ" */
+			...
+			continue;
+		}
+	}
+}
+
+5.6 Send a message
+-------------------------------------------------------------------------------
+
+We can send messages to ether a peer whose port number is resloved or a group we
+created. To send a message to a peer, ipcon_send_unicast() API is used.
+
+
+	int ipcon_send_unicast(IPCON_HANDLER handler,
+				__u32 port,
+				void *buf,
+				size_t size);
+
+"handler" is the IPCON handler created by ipcon_create_handler(). "port" is the
+port number of the peer to which we want to send a message. "buf" is used to
+save the message data to be sent, "size" is the length of message data.
+
+For example, following codes send a string "Hello world!" to a service peer with
+a name of "string_service".
+
+
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <libipcon.h>
+
+#define service_name	"string_service"
+#define str_msg		"Hello world!"
+__u32 srv_port;
+
+int main (int argc, char *argv[])
+{
+	int ret = 0;
+	IPCON_HANDLER	handler;
+
+	handler = ipcon_create_handler();
+	if (!handler) {
+		fprintf(stderr, "Failed to create handler\n");
+		return -1;
+	}
+
+	ret = ipcon_find_service(handler, service_name, &srv_port);
+	if (ret< 0) {
+		fprintf(stderr, "No service %s found\n", service_name);
+		return ret;
+	}
+
+	fprintf(stderr, "Found service %s@%lu\n", service_name,
+		(unsigned long)srv_port);
+
+	ret = ipcon_send_unicast(handler,
+				srv_port,
+				str_msg,
+				strlen(str_msg) + 1);
+
+	if (ret < 0)
+		fprintf(stderr, "Failed to send message to %s@%lu\n",
+				service_name, (unsigned long)srv_port);
+
+	ipcon_free_handler(handler);
+
+	return ret;
+}
+
+As described above, message sending in IPCON is "connection less", there is no
+need for a sender to wait for the completion of message reading in receiver side.
+
+To send a message to a group, ipcon_send_multicast() API is used.
+
+	int ipcon_send_multicast(IPCON_HANDLER handler,
+				char *name,
+				void *buf,
+				size_t size);
+
+"name" is the group name registerred in ipcon_register_group(). The following
+example sends a string "Hello world!" to its "string_group" message group at 1s
+interval.
+
+#include <stdio.h>
+#include <stdlib.h>
+#include <unistd.h>
+#include <string.h>
+#include <libipcon.h>
+
+#define group_name	"string_group"
+#define str_msg		"Hello world!"
+__u32 srv_port;
+
+int main (int argc, char *argv[])
+{
+	int ret = 0;
+	IPCON_HANDLER	handler;
+
+	handler = ipcon_create_handler();
+	if (!handler) {
+		fprintf(stderr, "Failed to create handler\n");
+		return -1;
+	}
+
+	ret = ipcon_register_group(handler, group_name);
+	if (ret< 0) {
+		fprintf(stderr, "Failed to create group %s\n", group_name);
+		return ret;
+	}
+
+	fprintf(stderr, "Group %s is created\n", group_name);
+
+	while (1) {
+		ret = ipcon_send_multicast(handler,
+				group_name,
+				str_msg,
+				strlen(str_msg) + 1);
+
+		if (ret < 0) {
+			fprintf(stderr, "Failed to send group message to %s\n",
+				group_name);
+			break;
+		}
+
+		usleep(1000 * 1000);
+	}
+
+	ipcon_free_handler(handler);
+
+	return ret;
+}
+
+Note:
+    A multicast message sender will not care about whether the message are
+    received by all subscribers or not, it even does not care about whether
+    there is a subscriber or not.
+
+5.7 "ipcon_kevent" group
+-------------------------------------------------------------------------------
+
+When IPCON driver is insmoded, it will register a special "ipcon_kevent" message
+group to send some service/group register/unregister event. The message format
+of this message group is as following:
+
+struct ipcon_kevent {
+	enum ipcon_kevent_type type;
+	union {
+		struct {
+			char name[IPCON_MAX_SRV_NAME_LEN];
+			__u32 portid;
+		} srv;
+		struct {
+			char name[IPCON_MAX_GRP_NAME_LEN];
+			__u32 groupid;
+		} grp;
+		struct {
+			__u32 portid;
+		} peer;
+	};
+};
+
+- type
+  The type of the event, which is defined as:
+
+	enum ipcon_kevent_type {
+		IPCON_EVENT_SRV_ADD,
+		IPCON_EVENT_SRV_REMOVE,
+		IPCON_EVENT_GRP_ADD,
+		IPCON_EVENT_GRP_REMOVE,
+		IPCON_EVENT_PEER_REMOVE,
+	};
+
+  * IPCON_EVENT_SRV_ADD
+    A service is registerred.
+  * IPCON_EVENT_SRV_REMOVE
+    A service is unregisterred.
+  * IPCON_EVENT_GRP_ADD
+    An user message group is registerred.
+  * IPCON_EVENT_GRP_REMOVE
+    An user message group is unregisterred.
+  * IPCON_EVENT_PEER_REMOVE
+    A peer is removed.
+
+- srv
+  The service information only valid when type is IPCON_EVENT_SRV_ADD  or
+  IPCON_EVENT_SRV_REMOVE. "name" describes the name of the service and the
+  "portid" is the port number of the service peer.
+
+- grp
+  The group information only valid when type is IPCON_EVENT_GRP_ADD or
+  IPCON_EVENT_GRP_REMOVE. "name" describes the name of the group and the
+  "groupid" describe the internal group id (not visible to user, maybe removed
+  in the future.)
+
+- peer
+  The peer information only valid when type is IPCON_EVENT_PEER_REMOVE. "portid"
+  describes the port number of the peer that is removed.
