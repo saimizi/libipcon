@@ -7,11 +7,6 @@ common_cflags = -g -O2 -Wall \
 
 common_ldflags =$(LIBNL_GENL_LIBS)
 
-ipcon_test_SOURCES = ipcon_test.c
-ipcon_test_CFLAGS =$(common_cflags)
-#ipcon_test_LDFLAGS= -L${top_builddir}/lib/.libs
-ipcon_test_LDADD = $(common_ldflags)
-
 ipcon_server_SOURCES = ipcon_server.c
 ipcon_server_CFLAGS =$(common_cflags)
 ipcon_server_LDFLAGS= -L${top_builddir}/lib/.libs
