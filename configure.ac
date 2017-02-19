@@ -39,7 +39,7 @@ AC_SUBST(ksrc)
 AC_CONFIG_FILES([Makefile
 		 driver/Makefile
 		 lib/Makefile
-		 app/Makefile
+		 test/Makefile
 		])
 AC_OUTPUT
 
