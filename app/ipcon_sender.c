@@ -73,15 +73,14 @@ int main(int argc, char *argv[])
 
 	do {
 
-		ret = ipcon_join_group(handler, IPCON_KERNEL_GROUP_NAME, 0);
+		ret = ipcon_join_group(handler, IPCON_KERNEL_GROUP, 0);
 		if (ret < 0)
 			ipcon_err("Failed to get %s group :%s(%d).\n",
-					IPCON_KERNEL_GROUP_NAME,
+					IPCON_KERNEL_GROUP,
 					strerror(-ret),
 					-ret);
 		else
-			ipcon_info("Joined %s group.\n",
-					IPCON_KERNEL_GROUP_NAME);
+			ipcon_info("Joined %s group.\n", IPCON_KERNEL_GROUP);
 
 		ret = ipcon_find_service(handler, srv_name, &srv_port);
 		if (!ret) {
@@ -126,7 +125,7 @@ int main(int argc, char *argv[])
 					should_quit = 1;
 
 			} else if (im.type == IPCON_GROUP_MSG) {
-				if (!strcmp(im.group, IPCON_KERNEL_GROUP_NAME))
+				if (!strcmp(im.group, IPCON_KERNEL_GROUP))
 					ipcon_kevent(&im);
 
 				continue;

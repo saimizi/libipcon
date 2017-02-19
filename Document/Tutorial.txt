@@ -15,7 +15,7 @@ The content of this tutorial are as following:
 	5.4 Register a group
 	5.5 Receive a message
 	5.6 Send a message
-	5.7 "ipcon_kevent" message group
+	5.7 IPCON_KERNEL_GROUP message group
 
 
 1. What IPCON does NOT help for ?
@@ -276,6 +276,13 @@ to IPCON driver. As you may find in libipcon.h, IPCON_HANDLER is defined as an
 than NULL. if failed (such that ipcon.ko has not been insmoded) it returns NULL
 instead.
 
+Note:
+    In ipcon_create_handler(), a port number is allocated for the peer. The port
+    number 0 is statically assigned to IPCON driver. So the port number
+    allocated to user process will be a Non-zero unsigned int value. Also
+    since communication with IPCON driver is limited within the libipcon APIs.
+    User process will NEVER receive a message from port 0.
+
 To free an IPCON handler, just call
 	ipcon_free_handler(handler);
 
@@ -353,7 +360,7 @@ and return an negative error code (-ENOENT) imediately. You may doubt that since
 ipcon_find_service() is non-blocked, if the service "ServiceX" is registerred
 after the Client's ipcon_find_service() call, should I do a while loop here to
 wait for it? Of courcse, that is OK, but not good. You may use IPCON driver's
-"ipcon_kevent" group message to detect service registeration asynchrously which
+IPCON_KERNEL_GROUP group message to detect service registeration asynchrously which
 will be described later in this tutorial.
 
 
@@ -446,7 +453,7 @@ ipcon_leave_group();
 Note:
     When a Provider unregisters a group, Subscriber should detect it and call
     ipcon_leave_group() explicitly to unsubscribe the message. IPCON driver's
-    "ipcon_kevent" group message can be used to detect group unregister event.
+    IPCON_KERNEL_GROUP group message can be used to detect group unregister event.
 
 
 5.5 Receive a message
@@ -676,12 +683,14 @@ Note:
     received by all subscribers or not, it even does not care about whether
     there is a subscriber or not.
 
-5.7 "ipcon_kevent" group
+
+5.7 IPCON_KERNEL_GROUP message group
 -------------------------------------------------------------------------------
 
-When IPCON driver is insmoded, it will register a special "ipcon_kevent" message
-group to send some service/group register/unregister event. The message format
-of this message group is as following:
+When IPCON driver is insmoded, it will register a special IPCON_KERNEL_GROUP
+(named "ipcon_kevent") message group to send some service/group
+register/unregister event. The message format of this message group is as
+following:
 
 struct ipcon_kevent {
 	enum ipcon_kevent_type type;
@@ -736,3 +745,116 @@ struct ipcon_kevent {
 - peer
   The peer information only valid when type is IPCON_EVENT_PEER_REMOVE. "portid"
   describes the port number of the peer that is removed.
+
+By using the "ipcon_kevent" message, we can detect the service/group dynamiclly.
+Here is an example to dynamliclly detect "ServerX" service and communicate with it.
+
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <libipcon.h>
+
+#define service_name	"ServerX"
+__u32 srv_port;
+
+int main (int argc, char *argv[])
+{
+	int ret = 0;
+	IPCON_HANDLER	handler;
+
+	handler = ipcon_create_handler();
+	if (!handler) {
+		fprintf(stderr, "Failed to create handler\n");
+		return -1;
+	}
+
+	/*
+	 * 1. Join the ipcon_kevent group
+	 *
+	 *    IPCON_KERNEL_GROUP_NAME here is defined as "ipcon_kevent" in ipcon.h,
+	 *    you should use this macro and avoid using "ipcon_kevent" directly.
+	 */
+	ret = ipcon_join_group(handler, IPCON_KERNEL_GROUP, 0);
+	if (ret < 0) {
+		fprintf(stderr, "Failed to join %s group.\n",
+			IPCON_KERNEL_GROUP_NAME);
+
+		ipcon_free_handler(handler);
+		return ret;
+	}
+
+	/*
+	 * 2. Find "ServerX" service, it maybe failed.
+	 *
+	 *    Note: this step 2 must NOT be done before step 1 above.
+	 *          Otherwise you may failed to detect service properly.
+	 */
+	ipcon_find_service(handler, service_name, &srv_port);
+
+	while (!should_quit) {
+		struct ipcon_msg im;
+		struct ipcon_kevent *ik = NULL;
+
+		ret = ipcon_rcv(handler, &im);
+		if (ret < 0) {
+			fprintf(stderr, "Receive msg failed: %s(%d)\n",
+					strerror(-ret), -ret);
+			should_quit = 1;
+			continue;
+		}
+
+		if (im.type == IPCON_GROUP_MSG)  {
+			if (!strcmp(im.group, IPCON_KERNEL_GROUP)) {
+				ik = (struct ipcon_kevent *)im.buf;
+
+				if ((ik.type = IPCON_EVENT_SRV_ADD) &&
+					!srv_port) {
+
+					/* 3. "ServerX" service is added */
+					if (!strcmp(ik.srv.name, service_name))
+						srv_port = ik.srv.portid;
+
+					...
+
+					continue;
+				}
+
+				if ((ik.type = IPCON_EVENT_SRV_REMOVE) &&
+					srv_port) {
+
+					/* 5. "ServerX" service is removed */
+					if (!strcmp(ik.srv.name, service_name))
+						srv_port = 0;
+
+					...
+
+					continue;
+				}
+			}
+
+			...
+
+			continue;
+		}
+
+		if  (im.type == IPCON_NORMAL_MSG) {
+			if (im.port == srv_port) {
+				/* 4. deal with message from service "ServerX" */
+				...
+			}
+
+			...
+		}
+	}
+
+
+	ipcon_free_handler(handler);
+
+	return ret;
+}
+
+Recall that the port number of a user process peek will never be 0, the example
+above use "srv_port == 0" to judge service "ServerX" is added or removed.
+Attention should be paid here that in order to detect the service properly, the
+order of step 1 and 2 must NOT be reversed. Otherwise if "ServerX" is
+registerred between these two calls, you will fail to detect it.

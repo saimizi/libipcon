@@ -86,18 +86,17 @@ int main(int argc, char *argv[])
 			break;
 		}
 
-		ret = ipcon_join_group(handler,
-					IPCON_KERNEL_GROUP_NAME, 0);
+		ret = ipcon_join_group(handler, IPCON_KERNEL_GROUP, 0);
 		if (ret < 0) {
 			ipcon_err("Failed to get %s group :%s(%d).\n",
-					IPCON_KERNEL_GROUP_NAME,
+					IPCON_KERNEL_GROUP,
 					strerror(-ret),
 					-ret);
 			ret = 1;
 			break;
 		}
 
-		ipcon_info("Joined %s group.\n", IPCON_KERNEL_GROUP_NAME);
+		ipcon_info("Joined %s group.\n", IPCON_KERNEL_GROUP);
 
 		ret = ipcon_join_group(handler, grp_name, 1);
 		if (!ret) {
@@ -133,7 +132,7 @@ int main(int argc, char *argv[])
 				continue;
 			}
 
-			if (!strcmp(im.group, IPCON_KERNEL_GROUP_NAME))
+			if (!strcmp(im.group, IPCON_KERNEL_GROUP))
 				ipcon_kevent(handler, &im);
 
 		}
