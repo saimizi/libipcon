@@ -17,6 +17,8 @@ The content of this tutorial are as following:
 	5.6 Send a message
 	5.7 IPCON_KERNEL_GROUP message group
     6. Conclusion
+    7. Appendix
+	7.1 Samples
 
 
 1. What IPCON does NOT help for ?
@@ -952,3 +954,28 @@ IPCON is designed as an convience mechanism for packet type IPC on Linux. I have
 tried to describes the content as correct as possible to reflect the design and
 present implementation of it. There may be mistakes. Any comments, advices or
 bug-reports are very appreciated.
+
+
+7. Appendix
+--------------------------------------------------------------------------------
+
+7.1 Samples
+--------------------------------------------------------------------------------
+
+Some samples can be found in the "test" directory of the source package.
+
+- ipcon_server.c
+  A "server"  which register a "ipcon_server" service and a "str_msg" group.
+  Any string message sent to it will be forwarded to "str_msg" message group.
+
+- ipcon_user.c
+  A "subscriber" who subscribes the "str_msg" message group provided by
+  ipcon_server and output the message received from this group.
+
+- ipcon_sender.c
+  A message sender who gets port number of ipcon_server by resloving the service
+  name "ipcon_server" and sends the specified message (passed as parameter
+  argv[1]) to "ipcon_server" at 1s interval.
+
+- ipcon_cmd.c
+  Same to ipcon_sender but is a one-shot message sender.
