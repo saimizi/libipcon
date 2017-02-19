@@ -26,7 +26,7 @@ AX_COMPARE_VERSION( [$LIBNL_GENL_VER],
 		    [ge],
 		    [$MIN_LIBNL_GENL_VER],
 		    [AC_MSG_RESULT([yes])],
-		    [AC_MSG_ERROR([version is not matched], [1])]
+		    [AC_MSG_ERROR([version is too old.], [1])]
 		  )
 AC_ARG_WITH([ksrc],
 	AS_HELP_STRING([--with-ksrc],[Linux kernel path.]))

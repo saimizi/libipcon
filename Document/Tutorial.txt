@@ -216,7 +216,7 @@ In this section, I describe the usage of IPCON in general including
 IPCON requires following packages:
 
 - autoconf, automake, libtool, gcc, and make for the build system.
-- libnl
+- libnl-genl-3.0 >= 3.2.27
   libipcon uses libnl for dealing with Generic netlink messages.
 
 In the source top directory, run the following commands to configure and compile
