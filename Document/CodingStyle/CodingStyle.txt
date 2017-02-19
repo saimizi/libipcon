@@ -1,0 +1,54 @@
+Coding style
+
+It is difficult to define a coding style though it is an very important thing.
+Thankfully there are many very excellent coding styles distributed in OSS, such
+as linux kernal coding style. so the simplest way is to divert it.:) 
+
+
+DESCRIPTION
+------------
+
+One reason of using linux kernel coding style is that it is practicable and less
+redundants. 8 character tab and 80 column rules make the code easy to read
+and often give you a chance to review the program design. If there are codes
+difficuclt to satisfy these two rules, often they are better to be reviewed
+again.
+
+The description of linux kernel coding style can be found in the
+Documentation/CodingStyle of the linux kernel source tree. I copied one from
+linux-3.18.24 source tree to the tool/linux_script. You can also refer to it
+from there.
+
+Especially, please pay attention to wrting comment in the source code. It is
+a very stupid thing to write a lot of comments to describe something which is
+obvious from the source code itself. Reading "Chapter 8 Commenting" of the linux
+coding style is strongly recommended.
+
+
+TOOL
+------------
+
+Also there is a tool provided by linux kernel to check the coding style of the
+source code. It is very helpful.
+
+$ code_check test_main.c
+test_main.c:10: WARNING: line over 80 characters
+test_main.c:10: WARNING: please, no space before tabs
+test_main.c:10: ERROR: space required after that ',' (ctx:VxV)
+test_main.c:10: ERROR: space required after that ',' (ctx:VxV)
+test_main.c:10: ERROR: space required after that ',' (ctx:VxV)
+test_main.c:13: ERROR: "foo * bar" should be "foo *bar"
+test_main.c:13: ERROR: "foo * bar" should be "foo *bar"
+test_main.c:13: ERROR: "foo * bar" should be "foo *bar"
+test_main.c:13: ERROR: space required after that ',' (ctx:VxV)
+test_main.c:13: ERROR: space required after that ',' (ctx:VxV)
+test_main.c:13: WARNING: externs should be avoided in .c files
+...
+total: 293 errors, 74 warnings, 438 lines checked
+
+code_check is just a wrapper to the original linux kernel tool checkpatch.pl
+which you can also find in the script directory of the linux kernel source tree.
+
+Ofcourse both CodingSytle document and check tool from linux kernel follow the
+liscense of linux kernel (GPLv2). please referto linux_script/COPYING for
+detais.

@@ -1,0 +1,5 @@
+#!/bin/bash
+
+tool=${0%/*}/linux_script/checkpatch.pl
+
+${tool} --no-tree --file --terse $*
