@@ -8,6 +8,7 @@
 #include <fcntl.h>
 #include <netlink/netlink.h>
 #include <netlink/errno.h>
+#include <netlink/attr.h>
 #include <netlink/genl/genl.h>
 #include <netlink/genl/ctrl.h>
 #include <pthread.h>
