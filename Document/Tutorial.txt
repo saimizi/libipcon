@@ -1,0 +1,234 @@
+IPC Over Netlink (IPCON) Tutorial
+
+IPCON (IPC Over Netlink) is a packet type IPC mechanism basing on the netlink to
+provide the message communications among multiple local processes. 
+
+The content of this tutorial are as following:
+    1. What IPCON does NOT help for ?
+    2. What IPCON does help for ?
+    3. Terms Definition
+    4. Architectural Overview
+    5. How to use ?
+       5.1 Configuration and Compiling
+
+
+1. What IPCON does NOT help for ?
+-------------------------------------------------------------------------------
+
+To save your time, I decide to describe firstly what IPCON does not help for. If
+what you want to do falls into the following cases, it maybe not a good idea to
+spend time to read this tutorial and investigate the IPCON.:(
+
+- IPCON is for Linux.
+
+  As name hints, IPCON is basing on the netlink which is a Linux kernel
+  interface used for IPC. If you want a IPC on other platform, IPCON doesn't
+  help.
+
+- IPCON is a packet type IPC.
+
+  In IPCON, data is sent and received in a format of netlink message not stream.
+  That means, the data transferred in IPCON has the clear boundary. You can
+  receive a complete message or not at all but you can not receive a part of it.
+  If you want a stream type IPC, unix domain socket is a good choice.
+
+
+2. What IPCON does help for ?
+-------------------------------------------------------------------------------
+
+Ok, in this section, I will describe the advantages of using IPCON.
+
+- One/Many-to-One and One-to-Many (message multicasting) communications.
+
+  The One/Many-to-One communication is normally used to implement a
+  Server/Client model. One process serves as a server and there will be one or
+  many clients to send requests to and get the results from it.
+
+  While, the One-to-Many communication is needed when you want to implement a
+  so-called Provider/Subscriber model, in which a process serves as a provider
+  who is able to brodcast messages to many other processes named as subscribers
+  who are willing to receive messages from it. Subscribers recevie the messages
+  from the provider but do not send messages to it just like the relationship
+  between a newspaper company and its newspaper suscribers.
+
+  Almost all famous IPCs such as FIFO/Pipe, mq, sockets and etc are mainly
+  designed for the previous One/Many-to-One communication and do not support
+  message multicasting. In order to implemnet a Provider/Susbcriber model, you
+  have to create multiple channels between the provider and the suscribers,
+  which is often an unworthy effort.
+
+  IPCON supports both kind of communications and provides a few easy-to-use APIs
+  to let user application create its own message groups (as a provider) or
+  receive messages from one or many specific message groups (as a subscriber).
+
+- Creation and disapperance dection of a connected peer.
+
+  Often, it is not an easy thing to find where the communication partner is or
+  even much more difficult to detect its' abnormal death. For example, when
+  using a unix domain socket, a socket file has to be created for communication
+  partners to discorver each other and setup the communication. Since the socket
+  file is exposed to the filesystem, every other person can also see it which
+  may lead to the security issues. Also, an application will never know the
+  abnormal death of the communication partner until it gets an zero-size data
+  for read() or gets a EPIPE error for write() as well as receiving a SIGPIPE
+  signal.
+
+  IPCON provides an asynchronous method to inform user applications the
+  creation and the disapperance of a peer, a service or a message group. The
+  IPCON driver takes the role of managing the services (peers who have names)
+  and the message groups. When a service or a group is registerred by an user
+  process, it will sends the event message to user applications though a special
+  message group. Also by using the notify callchain of the netlink system, the
+  IPCON driver can also detect the removal of a connected peer and inform the
+  user applications.
+
+  Also, in order to communicate to a peer, what all you need is just a port
+  number binded to it. That means, if a process A wants process B to communicate
+  with process C, what it need is just to pass the port number of process C to
+  process B. This brings a greate flexibility in some cases.
+  
+- Connectionless communication.
+
+  Comparing to FIFO/Pipe, an advantage of the System V/Posix mq is said that the
+  messages are cached in the system so that a sender may send the message and
+  exit as soon as possible without waiting for the completion of receiver's
+  reading. This kind of message caching topic is related to an issue of how to
+  close the communication safely. 
+
+  As described above, IPCON is basing on the netlink which is a socket base
+  protocol. Every peer in IPCON has a socket inerface and its own socket queue,
+  so the messages to a peer will be cached to its own socket queue. There is no
+  spcific channel built up between the sender and the receiver. It is a complete
+  connectionless communication working in the same way of the mail instead of
+  the telephone. So IPCON has the same advantage of mq described above and
+  avoids the risk of using system-wide resources like mq at the same time.
+
+- Synchronous I/O multiplexing on file descriptor.
+
+  Since netlink is a socket base protocol, IPCON provides a socket file
+  descriptor which can be used for synchronous I/O such as select().
+
+
+3. Terms Definition
+-------------------------------------------------------------------------------
+
+In this section, the terms used in the IPCON description are described.
+
+- Peer
+
+  A connection point.
+
+- Service
+
+  A peer who has a unique name in system wide. For a peer to be discovered by
+  other peer(s) who want to communicate to it, it may register a name to IPCON.
+  Other peers may get its port number by reslove that name.
+
+- Group
+
+  A message group which is identified by a name. The group name must be unique
+  in system wide. A peer can create its own message group and multicast messages
+  to the peers who subscribed this group.
+
+
+
+4. Architectural Overview
+-------------------------------------------------------------------------------
+
+The diagram of IPCON is shown as following:
+	________ ________ ________
+	|      | |      | |      |
+	| App1 | |  ... | | AppN |
+	|______| |______| |______|	libipcon APIs
+    _ _ _ _ | _ _ _ _|_ _ _ _|_ _ _ _ _ _ _ _ _ _ _ _ 
+	____|________|_______|____
+	|			 |
+	|	libipcon	 |
+	|________________________|	
+	____|________|______|____
+    	|			 |	User space
+    ----|    Kernel socket API	 |------------------
+        |________________________|	Kernel space
+	____|________|______|____	
+	|			 |
+	|   Netlink Subsystem    |
+	|________________________|
+	_____________|____________
+	|			 |
+	|    Generic Netlink 	 |
+	|    protocol family	 |
+	|________________________|
+	_____________|___________
+	|			 |
+	|     IPCON Driver	 |
+	|________________________|
+
+
+- IPCON Driver
+
+  The IPCON implementation in Linux kenrel space. IPCON driver takes role of
+  managing services and groups registerred by peers. IPCON driver is implemented
+  as a Generic netlink protol "IPCON". The API of the IPCON driver can be found
+  in "Documents/ipcon_driver/driver_api.txt" of IPCON software package.
+
+- Generic Netlink family
+
+  Netlink protocol family supports many protocols such as NETLINK_ROUTE for
+  routing code, NETLINK_FIREWALL for netfilter codes and etc. Each protocol is
+  assigned a unique protocol number as identifier. While, since the maximum
+  protocol number is limited to 32 (already 21 protocols have been assigned in
+  linux-4.9 at present), it is in fact impossible to allocate a protocol number
+  for every new netlink user. In order to deal with this problem, a Generic
+  Netlink family module is introduced and used to multiplexing the communication
+  channel of multiple new netlink users.
+
+- Netlink Substem
+
+  Netlink protocol imeplemenation in Linux kernel.
+
+
+- Kernel socket API
+
+  Netlink is designed as a socket family protocol, So the communications between
+  user and kernel space are via standard socket APIs such as socket(), recv()...
+
+
+- libipcon
+
+  A library implementation for IPCON. libipcon hides the internal netlink
+  implementation details and provides an easy-to-use APIs for user applications
+  to communicate each other.
+
+In following sections, the usage of IPCON is shown with the example source
+codes.
+
+
+5. How to use ?
+-------------------------------------------------------------------------------
+
+In this section, I describe the usage of IPCON in general including
+- How to configure and compile IPCON pacakge.
+
+
+5.1 Configuration and Compiling
+-------------------------------------------------------------------------------
+
+IPCON requires following packages:
+
+- autoconf, automake, libtool, gcc, and make for the build system.
+- libnl
+  libipcon uses libnl for dealing with Generic netlink messages.
+
+In the source top directory, run the following commands to configure and compile
+the IPCON package.
+
+   ./autogen.sh
+   ./configure 
+   make 
+   make install
+
+In a cross compile environment, 
+
+   ./autogen.sh
+   ./configure --with-ksrc=<Path to linux kernel> --build=<TARGET_ARCH> --host=<HOST arch>
+   make ARCH=<arch> CROSS_COMPILE=<cross compiler>
