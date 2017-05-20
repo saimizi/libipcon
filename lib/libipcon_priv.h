@@ -2,18 +2,19 @@
 #define __LIBIPCON_PRIV_H__
 
 #include "libipcon.h"
+#include "util.h"
 
 #define IPCON_ANY_CMD	IPCON_CMD_MAX
 #define IPCON_ANY_PORT	0xFFFFFFFF
 
-struct ipcon_msg_queue {
+struct ipcon_msg_entry {
+	struct link_entry le;
 	struct nl_msg *msg;
-	struct ipcon_msg_queue *next;
 };
 
 struct ipcon_channel {
 	struct nl_sock *sk;
-	struct ipcon_msg_queue *mq;
+	struct link_entry_head mq;
 	int family;
 	__u32 port;
 	pthread_mutex_t mutex;

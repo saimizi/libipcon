@@ -78,7 +78,7 @@ static inline void *ipcon_put(struct nl_msg *msg, struct ipcon_channel *ic,
 			IPCON_HDR_SIZE, flags, cmd, 1);
 };
 
-static int queue_msg(struct ipcon_msg_queue **head, struct nl_msg *msg)
+static int queue_msg(struct link_entry_head *head, struct nl_msg *msg)
 {
 	int ret = 0;
 
@@ -87,45 +87,37 @@ static int queue_msg(struct ipcon_msg_queue **head, struct nl_msg *msg)
 
 	do {
 
-		if (*head) {
-			struct ipcon_msg_queue *t = *head;
+		struct ipcon_msg_entry *ime = malloc(sizeof(*ime));
 
-			while (t->next)
-				t = t->next;
-
-			t->next = malloc(sizeof(struct ipcon_msg_queue));
-			if (t->next) {
-				ret = -ENOMEM;
-				break;
-			}
-
-			t->next->msg = msg;
-		} else {
-			*head = malloc(sizeof(struct ipcon_msg_queue));
-			if (!(*head)) {
-				ret = -ENOMEM;
-				break;
-			}
-
-			(*head)->msg = msg;
+		if (!ime) {
+			ret = -ENOMEM;
+			break;
 		}
+
+		le_init(&ime->le);
+		ime->msg = msg;
+
+		le_addtail(head, LINK_ENTRY(ime));
+
 	} while (0);
 
 	return ret;
 }
 
-static struct nl_msg *dequeue_msg(struct ipcon_msg_queue **head)
+static struct nl_msg *dequeue_msg(struct link_entry_head *head)
 {
 	struct nl_msg *msg = NULL;
-	struct ipcon_msg_queue *imq = NULL;
+	struct ipcon_msg_entry *ime = NULL;
 
-	if (!head || !(*head))
+	if (!head)
 		return NULL;
 
-	imq = (*head);
-	msg = (*head)->msg;
-	*head = imq->next;
-	free(imq);
+	ime = le_next(LINK_ENTRY(head));
+	if (ime) {
+		le_remove(LINK_ENTRY(ime));
+		msg = ime->msg;
+		free(ime);
+	}
 
 	return msg;
 }
@@ -168,43 +160,28 @@ static inline int rcvmsg_match_cond(struct nl_msg *msg,
 	return 0;
 }
 
-static struct nl_msg *dequeue_msg_cond(struct ipcon_msg_queue **head,
+static struct nl_msg *dequeue_msg_cond(struct link_entry_head *head,
 				__u32 target_port, int target_cmd)
 {
 	struct nl_msg *msg = NULL;
-	struct ipcon_msg_queue *srh = NULL;
-	struct ipcon_msg_queue *psrh = NULL;
+	struct ipcon_msg_entry *ime = NULL;
 
-	if (!head || !(*head))
+	if (!head)
 		return NULL;
 
-	psrh = srh = *head;
-
-	while (srh) {
-		struct nlmsghdr *nlh = nlh = nlmsg_hdr(srh->msg);
-		struct genlmsghdr *genlh = genlh = nlmsg_data(nlh);
-		__u32 src_port = nlmsg_get_src(srh->msg)->nl_pid;
+	while (ime = le_next(LINK_ENTRY(head))) {
+		struct nlmsghdr *nlh = nlh = nlmsg_hdr(ime->msg);
+		struct genlmsghdr *genlh = nlmsg_data(nlh);
+		__u32 src_port = nlmsg_get_src(ime->msg)->nl_pid;
 		int cmd = genlh->cmd;
 
 		if (port_match(src_port, target_port) &&
 			cmd_match(cmd, target_cmd)) {
-
-			if (srh == *head)
-				*head = srh->next;
-			else
-				psrh->next = srh->next;
-
-			srh->next = NULL;
+			le_remove(LINK_ENTRY(ime));
+			msg = ime->msg;
+			free(ime);
 			break;
 		}
-
-		psrh = srh;
-		srh = srh->next;
-	}
-
-	if (srh) {
-		msg = srh->msg;
-		free(srh);
 	}
 
 	return msg;
@@ -359,7 +336,7 @@ static inline int ipcon_chan_init(struct ipcon_channel *ic)
 	if (ret)
 		return ret;
 
-	ic->mq = NULL;
+	lh_init(&ic->mq);
 	ic->family = 0;
 
 	ic->sk = nl_socket_alloc();
@@ -385,15 +362,13 @@ static inline void ipcon_chan_destory(struct ipcon_channel *ic)
 		return;
 
 	nl_socket_free(ic->sk);
-	if (ic->mq) {
+	if (le_getcnt(&ic->mq)) {
 		struct nl_msg *msg = NULL;
 
 		do {
 			msg = dequeue_msg(&ic->mq);
 			nlmsg_free(msg);
 		} while (msg);
-
-		ic->mq = NULL;
 	}
 	ic->family = 0;
 	pthread_mutex_destroy(&ic->mutex);

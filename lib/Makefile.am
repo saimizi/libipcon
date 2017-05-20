@@ -1,6 +1,6 @@
 lib_LTLIBRARIES = libipcon.la
 
-libipcon_la_CPPFLAGS =	-Wextra \
+libipcon_la_CPPFLAGS =	-g -Wextra \
 			-Werror \
 			-Wformat=2 \
 			-Wcast-qual \
@@ -16,6 +16,6 @@ libipcon_la_CPPFLAGS =	-Wextra \
 			-I ${top_builddir}/driver \
 			$(LIBNL_GENL_CFLAGS)
 
-libipcon_la_SOURCES = libipcon.c
+libipcon_la_SOURCES = libipcon.c util.c
 libipcon_la_LIBADD = -lpthread $(LIBNL_GENL_LIBS)
 libipcon_la_LDFLAGS = -Wl,--version-script,${srcdir}/ipcon.map -version-info 0:0:0
