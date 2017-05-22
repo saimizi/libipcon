@@ -121,8 +121,10 @@ int main(int argc, char *argv[])
 					should_send_msg = 1;
 				}
 
-				if (!strcmp(im.buf, "bye"))
+				if (!strcmp(im.buf, "bye")) {
 					should_quit = 1;
+					continue;
+				}
 
 			} else if (im.type == IPCON_GROUP_MSG) {
 				if (!strcmp(im.group, IPCON_KERNEL_GROUP))
