@@ -5,7 +5,6 @@ VER_0 {
 		ipcon_register_service;
 		ipcon_unregister_service;
 		ipcon_find_service;
-		ipcon_rcv;
 		ipcon_send_unicast;
 		ipcon_send_multicast;
 		ipcon_join_group;
@@ -16,6 +15,9 @@ VER_0 {
 		ipcon_join_group;
 		ipcon_register_group;
 		ipcon_unregister_group;
+		ipcon_rcv;
+		ipcon_rcv_nonblock;
+		ipcon_rcv_timeout;
 	local:
 		*;
 };

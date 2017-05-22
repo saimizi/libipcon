@@ -37,6 +37,11 @@ static inline void ipcon_ctrl_lock(struct ipcon_peer_handler *iph)
 	pthread_mutex_lock(&iph->ctrl_chan.mutex);
 }
 
+static inline int ipcon_ctrl_trylock(struct ipcon_peer_handler *iph)
+{
+	return -pthread_mutex_trylock(&iph->ctrl_chan.mutex);
+}
+
 static inline void ipcon_ctrl_unlock(struct ipcon_peer_handler *iph)
 {
 	pthread_mutex_unlock(&iph->ctrl_chan.mutex);
@@ -45,6 +50,11 @@ static inline void ipcon_ctrl_unlock(struct ipcon_peer_handler *iph)
 static inline void ipcon_com_lock(struct ipcon_peer_handler *iph)
 {
 	pthread_mutex_lock(&iph->chan.mutex);
+}
+
+static inline int ipcon_com_trylock(struct ipcon_peer_handler *iph)
+{
+	return -pthread_mutex_trylock(&iph->chan.mutex);
 }
 
 static inline void ipcon_com_unlock(struct ipcon_peer_handler *iph)

@@ -232,8 +232,8 @@ static int valid_msg_cb(struct nl_msg *msg, void *arg)
  * target_cmd:  receive a specified cmd, a IPCON_ANY_CMD match any command.
  */
 
-static int ipcon_rcv_msg(struct ipcon_channel *ic,
-			__u32 target_port, int target_cmd, struct nl_msg **pmsg)
+static int ipcon_rcv_msg(struct ipcon_channel *ic, __u32 target_port,
+		int target_cmd, struct nl_msg **pmsg, struct timeval *timeout)
 {
 
 	struct ipcon_rcv_msg_info irmi;
@@ -248,6 +248,24 @@ static int ipcon_rcv_msg(struct ipcon_channel *ic,
 		if (pmsg)
 			*pmsg = msg;
 		return 0;
+	}
+
+	if (timeout) {
+		int fd = nl_socket_get_fd(ic->sk);
+		fd_set rfds;
+
+		FD_ZERO(&rfds);
+		FD_SET(fd, &rfds);
+
+		ret = select(fd + 1, &rfds, NULL, NULL, timeout);
+		if (ret <= 0) {
+			if (!ret)
+				ret = -ETIMEDOUT;
+			else
+				ret = -errno;
+
+			return ret;
+		}
 	}
 
 	irmi.ic = ic;
@@ -441,7 +459,7 @@ IPCON_HANDLER ipcon_create_handler(void)
 		if (!ret) {
 			do {
 				ret = ipcon_rcv_msg(&iph->ctrl_chan,
-					0, IPCON_PEER_REG, NULL);
+					0, IPCON_PEER_REG, NULL, NULL);
 
 			} while (ret == -EAGAIN);
 		}
@@ -524,7 +542,7 @@ int ipcon_register_service(IPCON_HANDLER handler, char *name)
 		if (!ret) {
 			do {
 				ret = ipcon_rcv_msg(&iph->ctrl_chan,
-						0, IPCON_SRV_REG, NULL);
+						0, IPCON_SRV_REG, NULL, NULL);
 
 			} while (ret == -EAGAIN);
 		}
@@ -570,7 +588,7 @@ int ipcon_register_group(IPCON_HANDLER handler, char *name)
 		if (!ret) {
 			do {
 				ret = ipcon_rcv_msg(&iph->ctrl_chan,
-					0, IPCON_GRP_REG, NULL);
+					0, IPCON_GRP_REG, NULL, NULL);
 
 			} while (ret == -EAGAIN);
 		}
@@ -620,7 +638,7 @@ int ipcon_unregister_service(IPCON_HANDLER handler, char *name)
 		if (!ret) {
 			do {
 				ret = ipcon_rcv_msg(&iph->ctrl_chan,
-						0, IPCON_SRV_UNREG, NULL);
+						0, IPCON_SRV_UNREG, NULL, NULL);
 			} while (ret == -EAGAIN);
 		}
 		ipcon_ctrl_unlock(iph);
@@ -689,7 +707,8 @@ int ipcon_find_service(IPCON_HANDLER handler, char *name, __u32 *srv_port)
 			ret = ipcon_rcv_msg(&iph->ctrl_chan,
 					0,
 					IPCON_SRV_RESLOVE,
-					&msg);
+					&msg,
+					NULL);
 		} while (ret == -EAGAIN);
 
 		ipcon_ctrl_unlock(iph);
@@ -771,7 +790,8 @@ static int ipcon_get_group(struct ipcon_peer_handler *iph, char *name,
 			ret = ipcon_rcv_msg(&iph->ctrl_chan,
 					0,
 					IPCON_GRP_RESLOVE,
-					&msg);
+					&msg,
+					NULL);
 
 		} while (ret == -EAGAIN);
 
@@ -917,107 +937,16 @@ int ipcon_unregister_group(IPCON_HANDLER handler, char *name)
 		if (!ret) {
 			do {
 				ret = ipcon_rcv_msg(&iph->ctrl_chan,
-						0, IPCON_GRP_UNREG, NULL);
+						0,
+						IPCON_GRP_UNREG,
+						NULL,
+						NULL);
 			} while (ret == -EAGAIN);
 		}
 
 		ipcon_ctrl_unlock(iph);
 	} while (0);
 
-
-	return ret;
-}
-
-/*
- * ipcon_rcv
- *
- * Messages maybe received from
- * - Previously received messages which have been saved in the queue.
- * - Receive from remote point.
- *
- * if there is a message, ipcon_rcv() will return it immediately.
- * Otherwise, block until a message is coming.
- *
- * No lock needed
- * - no ctrl message will be recevived from the communication channel.
- * - read/write can be done simultaneously for socket.
- */
-
-int ipcon_rcv(IPCON_HANDLER handler, struct ipcon_msg *im)
-{
-	int ret = 0;
-	struct ipcon_peer_handler *iph = handler_to_iph(handler);
-	struct nl_msg *msg = NULL;
-
-	if (!iph || !im)
-		return -EINVAL;
-
-	do {
-		struct nlmsghdr *nlh = NULL;
-		struct nlattr *tb[NUM_IPCON_ATTR];
-		int len;
-
-		ret = ipcon_rcv_msg(&iph->chan,
-				IPCON_ANY_PORT,
-				IPCON_USR_MSG,
-				&msg);
-		if (ret < 0)
-			break;
-
-
-		nlh = nlmsg_hdr(msg);
-		ret = genlmsg_parse(nlh,
-				IPCON_HDR_SIZE,
-				tb,
-				IPCON_ATTR_MAX,
-				ipcon_policy);
-
-		if (ret < 0) {
-			ret = libnl_error(ret);
-			break;
-		}
-
-		if (!tb[IPCON_ATTR_MSG_TYPE]) {
-			ret = -EREMOTEIO;
-			break;
-		}
-
-		if (!tb[IPCON_ATTR_DATA]) {
-			ret = -EREMOTEIO;
-			break;
-		}
-
-		im->type = nla_get_u32(tb[IPCON_ATTR_MSG_TYPE]);
-		if (im->type == IPCON_MSG_UNICAST) {
-
-			if (!tb[IPCON_ATTR_PORT]) {
-				ret = -EREMOTEIO;
-				break;
-			}
-
-			im->port = nla_get_u32(tb[IPCON_ATTR_PORT]);
-
-		} else if (im->type == IPCON_MSG_MULTICAST) {
-
-			if (!tb[IPCON_ATTR_GRP_NAME]) {
-				ret = -EREMOTEIO;
-				break;
-			}
-
-			strcpy(im->group,
-				nla_get_string(tb[IPCON_ATTR_GRP_NAME]));
-		} else {
-			ret = -EREMOTEIO;
-		}
-
-		im->len = (__u32) nla_len(tb[IPCON_ATTR_DATA]);
-		memcpy((void *)im->buf,
-			nla_data(tb[IPCON_ATTR_DATA]),
-			(size_t)im->len);
-
-	} while (0);
-
-	nlmsg_free(msg);
 
 	return ret;
 }
@@ -1115,8 +1044,11 @@ int ipcon_send_multicast(IPCON_HANDLER handler, char *name, void *buf,
 
 		if (!ret) {
 			do {
-				ret = ipcon_rcv_msg(&iph->ctrl_chan, 0,
-						IPCON_MULTICAST_MSG, NULL);
+				ret = ipcon_rcv_msg(&iph->ctrl_chan,
+						0,
+						IPCON_MULTICAST_MSG,
+						NULL,
+						NULL);
 			} while (ret == -EAGAIN);
 		}
 		ipcon_ctrl_unlock(iph);
@@ -1192,4 +1124,169 @@ int ipcon_getfd(IPCON_HANDLER handler)
 		return nl_socket_get_fd(iph->chan.sk);
 
 	return -EBADF;
+}
+
+static int is_timeout(struct timeval *timeout)
+{
+	return (!timeout->tv_sec) && (!timeout->tv_usec);
+}
+
+#define WAIT_TIME_USEC	1000	/* 1ms */
+static void update_timeout(struct timeval *timeout)
+{
+	if (timeout->tv_usec > WAIT_TIME_USEC) {
+		timeout->tv_usec -= WAIT_TIME_USEC;
+	} else {
+		if (timeout->tv_sec) {
+			timeout->tv_usec += 1000000 - WAIT_TIME_USEC;
+			timeout->tv_sec--;
+		} else {
+			timeout->tv_sec = 0;
+			timeout->tv_usec = 0;
+		}
+	}
+}
+
+int ipcon_rcv_timeout(IPCON_HANDLER handler, struct ipcon_msg *im,
+		struct timeval *timeout)
+{
+	int ret = 0;
+	struct ipcon_peer_handler *iph = handler_to_iph(handler);
+	struct nl_msg *msg = NULL;
+
+	if (!iph || !im)
+		return -EINVAL;
+
+	do {
+		int fd = nl_socket_get_fd(iph->chan.sk);
+		struct nlmsghdr *nlh = NULL;
+		struct nlattr *tb[NUM_IPCON_ATTR];
+		int len;
+
+		if (timeout) {
+			ret = ipcon_com_trylock(iph);
+			if (ret) {
+				do {
+					update_timeout(timeout);
+					if (is_timeout(timeout)) {
+						ret = -ETIMEDOUT;
+						break;
+					}
+					usleep(WAIT_TIME_USEC);
+
+					ret = ipcon_com_trylock(iph);
+					if (!ret)
+						break;
+				} while (1);
+
+				if (ret)
+					break;
+			}
+		} else {
+			ipcon_com_lock(iph);
+		}
+
+		msg = nlmsg_alloc();
+		if (!msg) {
+			ret = -ENOMEM;
+			break;
+		}
+
+		ret = ipcon_rcv_msg(&iph->chan,
+				IPCON_ANY_PORT,
+				IPCON_USR_MSG,
+				&msg,
+				timeout);
+
+		ipcon_com_unlock(iph);
+
+		if (ret < 0)
+			break;
+
+		nlh = nlmsg_hdr(msg);
+		ret = genlmsg_parse(nlh,
+				IPCON_HDR_SIZE,
+				tb,
+				IPCON_ATTR_MAX,
+				ipcon_policy);
+
+		if (ret < 0) {
+			ret = libnl_error(ret);
+			break;
+		}
+
+		if (!tb[IPCON_ATTR_MSG_TYPE]) {
+			ret = -EREMOTEIO;
+			break;
+		}
+
+		if (!tb[IPCON_ATTR_DATA]) {
+			ret = -EREMOTEIO;
+			break;
+		}
+
+		im->type = nla_get_u32(tb[IPCON_ATTR_MSG_TYPE]);
+		if (im->type == IPCON_MSG_UNICAST) {
+
+			if (!tb[IPCON_ATTR_PORT]) {
+				ret = -EREMOTEIO;
+				break;
+			}
+
+			im->port = nla_get_u32(tb[IPCON_ATTR_PORT]);
+
+		} else if (im->type == IPCON_MSG_MULTICAST) {
+
+			if (!tb[IPCON_ATTR_GRP_NAME]) {
+				ret = -EREMOTEIO;
+				break;
+			}
+
+			strcpy(im->group,
+				nla_get_string(tb[IPCON_ATTR_GRP_NAME]));
+		} else {
+			ret = -EREMOTEIO;
+		}
+
+		im->len = (__u32) nla_len(tb[IPCON_ATTR_DATA]);
+		memcpy((void *)im->buf,
+			nla_data(tb[IPCON_ATTR_DATA]),
+			(size_t)im->len);
+
+
+	} while (0);
+
+	nlmsg_free(msg);
+
+	return ret;
+}
+
+/*
+ * ipcon_rcv
+ *
+ * Messages maybe received from
+ * - Previously received messages which have been saved in the queue.
+ * - Receive from remote point.
+ *
+ * if there is a message, ipcon_rcv() will return it immediately.
+ * Otherwise, block until a message is coming.
+ *
+ * No lock needed
+ * - no ctrl message will be recevived from the communication channel.
+ * - read/write can be done simultaneously for socket.
+ */
+
+int ipcon_rcv(IPCON_HANDLER handler, struct ipcon_msg *im)
+{
+	return ipcon_rcv_timeout(handler, im, NULL);
+}
+
+int ipcon_rcv_nonblock(IPCON_HANDLER handler, struct ipcon_msg *im)
+{
+	struct timeval timeout;
+
+	timeout.tv_sec = 0;
+	timeout.tv_usec = 0;
+
+	return ipcon_rcv_timeout(handler, im, &timeout);
 }
