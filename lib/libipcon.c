@@ -69,6 +69,7 @@ static struct nla_policy ipcon_policy[NUM_IPCON_ATTR] = {
 				.maxlen = IPCON_MAX_GRP_NAME_LEN - 1 },
 	[IPCON_ATTR_DATA] = {.type = NLA_BINARY, .maxlen = IPCON_MAX_MSG_LEN},
 	[IPCON_ATTR_FLAG] = {.type = NLA_FLAG},
+	[IPCON_ATTR_PEER_CNT] = {.type = NLA_U32},
 };
 
 static inline void *ipcon_put(struct nl_msg *msg, struct ipcon_channel *ic,
@@ -392,6 +393,7 @@ IPCON_HANDLER ipcon_create_handler(void)
 	do {
 		int i;
 		int family;
+		struct nl_msg *msg = NULL;
 
 		if (ipcon_chan_init(&iph->chan))
 			break;
@@ -413,6 +415,40 @@ IPCON_HANDLER ipcon_create_handler(void)
 		/* We don't required a ACK by default */
 		nl_socket_disable_auto_ack(iph->chan.sk);
 		nl_socket_disable_auto_ack(iph->ctrl_chan.sk);
+
+		/* Register peer
+		 * The aim is to increase the ipcon driver reference counter so
+		 * that it will not be rmmoded while in use.
+		 * No need to unregister, because ipcon driver is able to detect
+		 * the removal of the peer itself and descrease the reference
+		 * counter automically.
+		 */
+		msg = nlmsg_alloc();
+		if (!msg) {
+			ret = -ENOMEM;
+			break;
+		}
+
+		ipcon_put(msg, &iph->ctrl_chan, 0, IPCON_PEER_REG);
+		nla_put_u32(msg, IPCON_ATTR_MSG_TYPE, IPCON_MSG_UNICAST);
+		/* 1 for ctrl channel, another for communication channel */
+		nla_put_u32(msg, IPCON_ATTR_PEER_CNT, 2);
+
+		ipcon_ctrl_lock(iph);
+		ret = ipcon_send_msg(&iph->ctrl_chan, 0, msg, 1);
+
+		nlmsg_free(msg);
+		if (!ret) {
+			do {
+				ret = ipcon_rcv_msg(&iph->ctrl_chan,
+					0, IPCON_PEER_REG, NULL);
+
+			} while (ret == -EAGAIN);
+		}
+		ipcon_ctrl_unlock(iph);
+
+		if (!ret)
+			break;
 
 		return iph_to_handler(iph);
 
@@ -515,8 +551,6 @@ int ipcon_register_group(IPCON_HANDLER handler, char *name)
 	grp_name_len = (int)strlen(name);
 	if (!grp_name_len || grp_name_len > IPCON_MAX_GRP_NAME_LEN)
 		return -EINVAL;
-
-
 
 	do {
 		msg = nlmsg_alloc();
