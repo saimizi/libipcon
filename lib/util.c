@@ -61,7 +61,7 @@ void *le_remove(struct link_entry *le)
 
 	le->next->prev = le->prev;
 	le->prev->next = le->next;
-	(LINK_ENTRY_HEAD(le->head))->cnt--;
+	LINK_ENTRY_HEAD(le->head)->cnt--;
 
 	le->head = NULL;
 	le->prev = le->next = le;

@@ -485,9 +485,13 @@ int ipcon_register_service(IPCON_HANDLER handler, char *name)
 		ret = ipcon_send_msg(&iph->ctrl_chan, 0, msg, 1);
 		nlmsg_free(msg);
 
-		if (!ret)
-			ret = ipcon_rcv_msg(&iph->ctrl_chan,
-					0, IPCON_SRV_REG, NULL);
+		if (!ret) {
+			do {
+				ret = ipcon_rcv_msg(&iph->ctrl_chan,
+						0, IPCON_SRV_REG, NULL);
+
+			} while (ret == -EAGAIN);
+		}
 		ipcon_ctrl_unlock(iph);
 	} while (0);
 
@@ -529,9 +533,13 @@ int ipcon_register_group(IPCON_HANDLER handler, char *name)
 		ret = ipcon_send_msg(&iph->ctrl_chan, 0, msg, 1);
 		nlmsg_free(msg);
 
-		if (!ret)
-			ret = ipcon_rcv_msg(&iph->ctrl_chan,
+		if (!ret) {
+			do {
+				ret = ipcon_rcv_msg(&iph->ctrl_chan,
 					0, IPCON_GRP_REG, NULL);
+
+			} while (ret == -EAGAIN);
+		}
 		ipcon_ctrl_unlock(iph);
 	} while (0);
 
@@ -575,9 +583,12 @@ int ipcon_unregister_service(IPCON_HANDLER handler, char *name)
 		ret = ipcon_send_msg(&iph->ctrl_chan, 0, msg, 1);
 		nlmsg_free(msg);
 
-		if (!ret)
-			ret = ipcon_rcv_msg(&iph->ctrl_chan,
+		if (!ret) {
+			do {
+				ret = ipcon_rcv_msg(&iph->ctrl_chan,
 						0, IPCON_SRV_UNREG, NULL);
+			} while (ret == -EAGAIN);
+		}
 		ipcon_ctrl_unlock(iph);
 	} while (0);
 
@@ -640,10 +651,12 @@ int ipcon_find_service(IPCON_HANDLER handler, char *name, __u32 *srv_port)
 		 * IPCON_ATTR_PORT, if service not found, IPCON_ATTR_PORT will
 		 * not exist.
 		 */
-		ret = ipcon_rcv_msg(&iph->ctrl_chan,
-				0,
-				IPCON_SRV_RESLOVE,
-				&msg);
+		do {
+			ret = ipcon_rcv_msg(&iph->ctrl_chan,
+					0,
+					IPCON_SRV_RESLOVE,
+					&msg);
+		} while (ret == -EAGAIN);
 
 		ipcon_ctrl_unlock(iph);
 
@@ -720,10 +733,14 @@ static int ipcon_get_group(struct ipcon_peer_handler *iph, char *name,
 		 * IPCON_ATTR_GROUP, if service not found, IPCON_ATTR_GROUP will
 		 * not exist.
 		 */
-		ret = ipcon_rcv_msg(&iph->ctrl_chan,
-				0,
-				IPCON_GRP_RESLOVE,
-				&msg);
+		do {
+			ret = ipcon_rcv_msg(&iph->ctrl_chan,
+					0,
+					IPCON_GRP_RESLOVE,
+					&msg);
+
+		} while (ret == -EAGAIN);
+
 		if (ret < 0) {
 			ipcon_err("IPCON_GRP_RESLOVE fail: %s(%d).\n",
 				strerror(-ret), -ret);
@@ -863,9 +880,13 @@ int ipcon_unregister_group(IPCON_HANDLER handler, char *name)
 		ret = ipcon_send_msg(&iph->ctrl_chan, 0, msg, 1);
 		nlmsg_free(msg);
 
-		if (!ret)
-			ret = ipcon_rcv_msg(&iph->ctrl_chan,
+		if (!ret) {
+			do {
+				ret = ipcon_rcv_msg(&iph->ctrl_chan,
 						0, IPCON_GRP_UNREG, NULL);
+			} while (ret == -EAGAIN);
+		}
+
 		ipcon_ctrl_unlock(iph);
 	} while (0);
 
@@ -1058,9 +1079,12 @@ int ipcon_send_multicast(IPCON_HANDLER handler, char *name, void *buf,
 		ret = ipcon_send_msg(&iph->ctrl_chan, 0, msg, 1);
 		nlmsg_free(msg);
 
-		if (!ret)
-			ret = ipcon_rcv_msg(&iph->ctrl_chan, 0,
-					IPCON_MULTICAST_MSG, NULL);
+		if (!ret) {
+			do {
+				ret = ipcon_rcv_msg(&iph->ctrl_chan, 0,
+						IPCON_MULTICAST_MSG, NULL);
+			} while (ret == -EAGAIN);
+		}
 		ipcon_ctrl_unlock(iph);
 
 	} while (0);
