@@ -63,10 +63,10 @@ static struct nla_policy ipcon_policy[NUM_IPCON_ATTR] = {
 	[IPCON_ATTR_MSG_TYPE] = {.type = NLA_U32},
 	[IPCON_ATTR_PORT] = {.type = NLA_U32},
 	[IPCON_ATTR_SRV_NAME] = {.type = NLA_NUL_STRING,
-				.maxlen = IPCON_MAX_SRV_NAME_LEN - 1 },
+				.maxlen = IPCON_MAX_NAME_LEN - 1 },
 	[IPCON_ATTR_GROUP] = {.type = NLA_U32},
 	[IPCON_ATTR_GRP_NAME] = {.type = NLA_NUL_STRING,
-				.maxlen = IPCON_MAX_GRP_NAME_LEN - 1 },
+				.maxlen = IPCON_MAX_NAME_LEN - 1 },
 	[IPCON_ATTR_DATA] = {.type = NLA_BINARY, .maxlen = IPCON_MAX_MSG_LEN},
 	[IPCON_ATTR_FLAG] = {.type = NLA_FLAG},
 	[IPCON_ATTR_PEER_CNT] = {.type = NLA_U32},
@@ -517,7 +517,7 @@ int ipcon_register_service(IPCON_HANDLER handler, char *name)
 		return -EINVAL;
 
 	srv_name_len = (int)strlen(name);
-	if (!srv_name_len || srv_name_len > IPCON_MAX_SRV_NAME_LEN)
+	if (!srv_name_len || srv_name_len > IPCON_MAX_NAME_LEN)
 		return -EINVAL;
 
 
@@ -567,7 +567,7 @@ int ipcon_register_group(IPCON_HANDLER handler, char *name)
 		return -EINVAL;
 
 	grp_name_len = (int)strlen(name);
-	if (!grp_name_len || grp_name_len > IPCON_MAX_GRP_NAME_LEN)
+	if (!grp_name_len || grp_name_len > IPCON_MAX_NAME_LEN)
 		return -EINVAL;
 
 	do {
@@ -616,7 +616,7 @@ int ipcon_unregister_service(IPCON_HANDLER handler, char *name)
 		return -EINVAL;
 
 	srv_name_len = (int)strlen(name);
-	if (!srv_name_len || srv_name_len > IPCON_MAX_SRV_NAME_LEN)
+	if (!srv_name_len || srv_name_len > IPCON_MAX_NAME_LEN)
 		return -EINVAL;
 
 
@@ -670,7 +670,7 @@ int ipcon_find_service(IPCON_HANDLER handler, char *name, __u32 *srv_port)
 		return -EINVAL;
 
 	srv_name_len = (int)strlen(name);
-	if (!srv_name_len || srv_name_len > IPCON_MAX_SRV_NAME_LEN)
+	if (!srv_name_len || srv_name_len > IPCON_MAX_NAME_LEN)
 		return -EINVAL;
 
 
@@ -745,8 +745,8 @@ int ipcon_find_service(IPCON_HANDLER handler, char *name, __u32 *srv_port)
 	return ret;
 }
 
-static int ipcon_get_group(struct ipcon_peer_handler *iph, char *name,
-		__u32 *groupid, int rcv_last_msg)
+static int ipcon_get_group(struct ipcon_peer_handler *iph, char *srvname,
+		char *grpname, __u32 *groupid, int rcv_last_msg)
 {
 	void *hdr = NULL;
 	int ret = 0;
@@ -756,7 +756,6 @@ static int ipcon_get_group(struct ipcon_peer_handler *iph, char *name,
 	struct nlattr *tb[NUM_IPCON_ATTR];
 
 	do {
-
 		msg = nlmsg_alloc();
 		if (!msg) {
 			ret = -ENOMEM;
@@ -766,7 +765,8 @@ static int ipcon_get_group(struct ipcon_peer_handler *iph, char *name,
 		ipcon_put(msg, &iph->ctrl_chan, 0, IPCON_GRP_RESLOVE);
 		nla_put_u32(msg, IPCON_ATTR_MSG_TYPE, IPCON_MSG_UNICAST);
 		nla_put_u32(msg, IPCON_ATTR_PORT, iph->chan.port);
-		nla_put_string(msg, IPCON_ATTR_GRP_NAME, name);
+		nla_put_string(msg, IPCON_ATTR_SRV_NAME, srvname);
+		nla_put_string(msg, IPCON_ATTR_GRP_NAME, grpname);
 		if (rcv_last_msg)
 			nla_put_flag(msg, IPCON_ATTR_FLAG);
 
@@ -838,25 +838,34 @@ static int ipcon_get_group(struct ipcon_peer_handler *iph, char *name,
  *	if set to non-zero value, the last group message will be queued for
  *	reading. This is for multicast message that represent a state.
  */
-int ipcon_join_group(IPCON_HANDLER handler, char *name, int rcv_last_msg)
+int ipcon_join_group(IPCON_HANDLER handler, char *srvname, char *grpname,
+		int rcv_last_msg)
 {
 	struct ipcon_peer_handler *iph = handler_to_iph(handler);
 	int ret = 0;
 	int srv_name_len = 0;
+	int grp_name_len = 0;
 	__u32 groupid = 0;
 
-	if (!iph || !name)
+
+	if (!iph || !srvname || !grpname)
 		return -EINVAL;
 
-	srv_name_len = (int)strlen(name);
-	if (!srv_name_len || srv_name_len > IPCON_MAX_GRP_NAME_LEN)
+	srv_name_len = (int)strlen(srvname);
+	grp_name_len = (int)strlen(grpname);
+
+	if (!srv_name_len || srv_name_len > IPCON_MAX_NAME_LEN)
+		return -EINVAL;
+
+	if (!grp_name_len || grp_name_len > IPCON_MAX_NAME_LEN)
 		return -EINVAL;
 
 	ipcon_ctrl_lock(iph);
 	do {
 		struct ipcon_group_info *igi = NULL;
 
-		ret = ipcon_get_group(iph, name, &groupid, rcv_last_msg);
+		ret = ipcon_get_group(iph, srvname, grpname,
+				&groupid, rcv_last_msg);
 
 		if (ret < 0)
 			break;
@@ -869,7 +878,7 @@ int ipcon_join_group(IPCON_HANDLER handler, char *name, int rcv_last_msg)
 			}
 
 			iph->grp->groupid = groupid;
-			strcpy(iph->grp->name, name);
+			strcpy(iph->grp->name, grpname);
 			iph->grp->next = NULL;
 		} else {
 
@@ -880,7 +889,7 @@ int ipcon_join_group(IPCON_HANDLER handler, char *name, int rcv_last_msg)
 			}
 
 			igi->groupid = groupid;
-			strcpy(igi->name, name);
+			strcpy(igi->name, grpname);
 			igi->next = iph->grp;
 			iph->grp = igi;
 		}
@@ -915,7 +924,7 @@ int ipcon_unregister_group(IPCON_HANDLER handler, char *name)
 		return -EINVAL;
 
 	grp_name_len = (int)strlen(name);
-	if (!grp_name_len || grp_name_len > IPCON_MAX_GRP_NAME_LEN)
+	if (!grp_name_len || grp_name_len > IPCON_MAX_NAME_LEN)
 		return -EINVAL;
 
 
@@ -1016,7 +1025,7 @@ int ipcon_send_multicast(IPCON_HANDLER handler, char *name, void *buf,
 	if (!iph || !name || !buf)
 		return -EINVAL;
 
-	if (strlen(name) > IPCON_MAX_GRP_NAME_LEN)
+	if (strlen(name) > IPCON_MAX_NAME_LEN)
 		return -EINVAL;
 
 

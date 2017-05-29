@@ -13,7 +13,7 @@
 
 struct ipcon_msg {
 	__u32 type;
-	char group[IPCON_MAX_GRP_NAME_LEN];
+	char group[IPCON_MAX_NAME_LEN];
 	__u32 port;
 	char buf[IPCON_MAX_MSG_LEN];
 	__u32 len;
@@ -30,7 +30,8 @@ int ipcon_send_unicast(IPCON_HANDLER handler, __u32 port,
 				void *buf, size_t size);
 int ipcon_register_group(IPCON_HANDLER handler, char *name);
 int ipcon_unregister_group(IPCON_HANDLER handler, char *name);
-int ipcon_join_group(IPCON_HANDLER handler, char *name, int rcv_last_msg);
+int ipcon_join_group(IPCON_HANDLER handler, char *srvname, char *grpname,
+		int rcv_last_msg);
 int ipcon_leave_group(IPCON_HANDLER handler, char *name);
 __u32 ipcon_get_selfport(IPCON_HANDLER handler);
 struct ipcon_srv *ipcon_get_selfsrv(IPCON_HANDLER handler);

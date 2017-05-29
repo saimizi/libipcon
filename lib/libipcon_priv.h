@@ -21,7 +21,7 @@ struct ipcon_channel {
 };
 
 struct ipcon_group_info {
-	char name[IPCON_MAX_GRP_NAME_LEN];
+	char name[IPCON_MAX_NAME_LEN];
 	__u32 groupid;
 	struct ipcon_group_info *next;
 };

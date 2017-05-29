@@ -19,6 +19,7 @@
 #define ipcon_err(fmt, ...) \
 	printf("[ipcon_user] %s-%d "fmt, __func__, __LINE__, ##__VA_ARGS__)
 
+#define srv_name	"ipcon_server"
 #define grp_name	"str_msg"
 __u32 srv_port;
 int srv_group_connected;
@@ -36,7 +37,7 @@ static void ipcon_kevent(IPCON_HANDLER handler, struct ipcon_msg *im)
 	switch (ik->type) {
 	case IPCON_EVENT_GRP_ADD:
 		if (!srv_group_connected && !strcmp(ik->grp.name, grp_name)) {
-			ret = ipcon_join_group(handler, grp_name, 1);
+			ret = ipcon_join_group(handler, srv_name, grp_name, 1);
 			if (ret < 0) {
 				ipcon_err("Failed to join group %s: %s(%d)\n",
 					grp_name,
@@ -65,6 +66,10 @@ static void ipcon_kevent(IPCON_HANDLER handler, struct ipcon_msg *im)
 
 		}
 		break;
+	case IPCON_EVENT_PEER_REMOVE:
+		ipcon_err("peer %lu is remove\n",
+				(unsigned long)ik->peer.portid);
+		break;
 	default:
 		break;
 	}
@@ -86,7 +91,8 @@ int main(int argc, char *argv[])
 			break;
 		}
 
-		ret = ipcon_join_group(handler, IPCON_KERNEL_GROUP, 0);
+		ret = ipcon_join_group(handler, IPCON_GENL_NAME,
+				IPCON_KERNEL_GROUP, 0);
 		if (ret < 0) {
 			ipcon_err("Failed to get %s group :%s(%d).\n",
 					IPCON_KERNEL_GROUP,
@@ -98,7 +104,7 @@ int main(int argc, char *argv[])
 
 		ipcon_info("Joined %s group.\n", IPCON_KERNEL_GROUP);
 
-		ret = ipcon_join_group(handler, grp_name, 1);
+		ret = ipcon_join_group(handler, srv_name, grp_name, 1);
 		if (!ret) {
 			srv_group_connected = 1;
 			ipcon_info("Joined %s group.\n", grp_name);
