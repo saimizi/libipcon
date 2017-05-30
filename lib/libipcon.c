@@ -604,6 +604,7 @@ int ipcon_unregister_group(IPCON_HANDLER handler, char *name)
 
 		ipcon_put(msg, &iph->ctrl_chan, 0, IPCON_GRP_UNREG);
 		nla_put_u32(msg, IPCON_ATTR_MSG_TYPE, IPCON_MSG_UNICAST);
+		nla_put_u32(msg, IPCON_ATTR_PORT, iph->chan.port);
 		nla_put_string(msg, IPCON_ATTR_GRP_NAME, name);
 
 		ipcon_ctrl_lock(iph);
