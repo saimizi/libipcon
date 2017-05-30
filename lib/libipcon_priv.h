@@ -14,7 +14,6 @@ struct ipcon_msg_entry {
 
 struct ipcon_channel {
 	struct nl_sock *sk;
-	struct link_entry_head mq;
 	int family;
 	__u32 port;
 	pthread_mutex_t mutex;

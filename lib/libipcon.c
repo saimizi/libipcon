@@ -79,253 +79,104 @@ static inline void *ipcon_put(struct nl_msg *msg, struct ipcon_channel *ic,
 			IPCON_HDR_SIZE, flags, cmd, 1);
 };
 
-static int queue_msg(struct link_entry_head *head, struct nl_msg *msg)
-{
-	int ret = 0;
-
-	if (!head || !msg)
-		return -EINVAL;
-
-	do {
-
-		struct ipcon_msg_entry *ime = malloc(sizeof(*ime));
-
-		if (!ime) {
-			ret = -ENOMEM;
-			break;
-		}
-
-		le_init(&ime->le);
-		ime->msg = msg;
-
-		le_addtail(head, LINK_ENTRY(ime));
-
-	} while (0);
-
-	return ret;
-}
-
-static struct nl_msg *dequeue_msg(struct link_entry_head *head)
-{
-	struct nl_msg *msg = NULL;
-	struct ipcon_msg_entry *ime = NULL;
-
-	if (!head)
-		return NULL;
-
-	ime = le_next(LINK_ENTRY(head));
-	if (ime) {
-		le_remove(LINK_ENTRY(ime));
-		msg = ime->msg;
-		free(ime);
-	}
-
-	return msg;
-}
-
-
-static inline int port_match(__u32 port1, __u32 port2)
-{
-	if ((port1 == IPCON_ANY_PORT) || (port2 == IPCON_ANY_PORT))
-		return 1;
-
-	return (port1 == port2);
-}
-
-static inline int cmd_match(int cmd1, int cmd2)
-{
-	if ((cmd1 == IPCON_ANY_CMD) || (cmd2 == IPCON_ANY_CMD))
-		return 1;
-
-	return (cmd1 == cmd2);
-}
-
-static inline int rcvmsg_match_cond(struct nl_msg *msg,
-				__u32 src_port, int target_cmd)
-{
-	struct nlmsghdr *nlh = NULL;
-	struct genlmsghdr *genlh = NULL;
-	struct sockaddr_nl *src_addr;
-
-	if (!msg)
-		return 0;
-
-	nlh = nlmsg_hdr(msg);
-	genlh = nlmsg_data(nlh);
-	src_addr = nlmsg_get_src(msg);
-
-	if (port_match(src_addr->nl_pid, src_port) &&
-		cmd_match(genlh->cmd, target_cmd))
-		return 1;
-
-	return 0;
-}
-
-static struct nl_msg *dequeue_msg_cond(struct link_entry_head *head,
-				__u32 target_port, int target_cmd)
-{
-	struct nl_msg *msg = NULL;
-	struct ipcon_msg_entry *ime = NULL;
-
-	if (!head)
-		return NULL;
-
-	while (ime = le_next(LINK_ENTRY(head))) {
-		struct nlmsghdr *nlh = nlh = nlmsg_hdr(ime->msg);
-		struct genlmsghdr *genlh = nlmsg_data(nlh);
-		__u32 src_port = nlmsg_get_src(ime->msg)->nl_pid;
-		int cmd = genlh->cmd;
-
-		if (port_match(src_port, target_port) &&
-			cmd_match(cmd, target_cmd)) {
-			le_remove(LINK_ENTRY(ime));
-			msg = ime->msg;
-			free(ime);
-			break;
-		}
-	}
-
-	return msg;
-}
-
-/*
- * CB for valid messages
- *
- */
-static int valid_msg_cb(struct nl_msg *msg, void *arg)
-{
-	struct ipcon_rcv_msg_info *irmi = arg;
-	struct nlmsghdr *nlh = nlmsg_hdr(msg);
-	struct genlmsghdr *genlh = nlmsg_data(nlh);
-	struct sockaddr_nl *src_addr;
-
-	if (!irmi || !irmi->ic) {
-		ipcon_err("valid msg losted for null handler.\n");
-		return -EINVAL;
-	}
-
-	if (nlh->nlmsg_type != irmi->ic->family)
-		return NL_SKIP;
-
-	nlmsg_get(msg);
-
-	if (rcvmsg_match_cond(msg, irmi->target_port, irmi->target_cmd))
-		irmi->msg = msg;
-	else
-		queue_msg(&irmi->ic->mq, msg);
-
-	return NL_OK;
-}
-
 /*
  * ipcon_rcv_msg
- *
- * Receive a specified message.
- * Message may be disordered, so this function is just an internal one.
- *
- * If a not matched message is recevied, it will be queued and -EAGAIN is
- * returned. while, nlerror message will never be queued. Since nlerror message
- * is processed sychronously by exclusion, there is no case that a nlerror
- * message will be miss received. error code of the nlerror will be returned.
- *
- * target_port: receive from a specified port, a IPCON_ANY_PORT match any port.
- * target_cmd:  receive a specified cmd, a IPCON_ANY_CMD match any command.
  */
 
-static int ipcon_rcv_msg(struct ipcon_channel *ic, __u32 target_port,
-		int target_cmd, struct nl_msg **pmsg, struct timeval *timeout)
+static int ipcon_rcv_msg(struct ipcon_channel *ic, struct nl_msg **nlh,
+		int wait_ack)
 {
-
-	struct ipcon_rcv_msg_info irmi;
-	struct nl_msg *msg = NULL;
 	int ret = 0;
+	struct nlmsghdr *lnlh = NULL;
+	struct sockaddr_nl from;
+	struct ucred *creds;
 
-	if (!ic)
-		return -EINVAL;
-
-	msg = dequeue_msg_cond(&ic->mq, target_port, target_cmd);
-	if (msg) {
-		if (pmsg)
-			*pmsg = msg;
-		return 0;
-	}
-
-	if (timeout) {
-		int fd = nl_socket_get_fd(ic->sk);
-		fd_set rfds;
-
-		FD_ZERO(&rfds);
-		FD_SET(fd, &rfds);
-
-		ret = select(fd + 1, &rfds, NULL, NULL, timeout);
-		if (ret <= 0) {
-			if (!ret)
-				ret = -ETIMEDOUT;
-			else
-				ret = -errno;
-
-			return ret;
+	do {
+		if (!ic) {
+			ret = -EINVAL;
+			break;
 		}
-	}
 
-	irmi.ic = ic;
-	irmi.target_port = target_port;
-	irmi.target_cmd = target_cmd;
-	irmi.msg = NULL;
+		memset(&from, 0, sizeof(from));
 
-	nl_socket_modify_cb(ic->sk,
-			NL_CB_VALID,
-			NL_CB_CUSTOM,
-			valid_msg_cb,
-			(void *)&irmi);
+		ret = nl_recv(ic->sk, &from, (unsigned char **)&lnlh, &creds);
+		if  (ret < 0) {
+			ret = libnl_error(ret);
+			break;
+		}
 
-	ret = nl_recvmsgs_default(ic->sk);
-	if (!ret) {
-		/*
-		 * If target message is not received, just return -EAGAIN to
-		 * inform caller. Do NOT loop here to wait the target message so
-		 * that non-block I/O can also be processed.
-		 *
-		 * if caller doesn't specify pmsg, error information is just
-		 * wanted. nlmsg_free() can deal with NULL pointer, no check
-		 * need.
-		 */
-		if (pmsg && !irmi.msg)
-			ret = -EAGAIN;
-		else if (pmsg)
-			*pmsg = irmi.msg;
-		else
-			nlmsg_free(irmi.msg);
-	} else {
-		ret = libnl_error(ret);
-	}
+		ret = 0;
+
+		if (lnlh->nlmsg_type == NLMSG_ERROR) {
+			struct nlmsgerr *e = nlmsg_data(lnlh);
+			struct genlmsghdr *gnlh = nlmsg_data(&e->msg);
+
+			ret = e->error;
+			break;
+		}
+
+		if (nlh) {
+			*nlh = nlmsg_convert(lnlh);
+			if (!*nlh) {
+				ret = -ENOMEM;
+				break;
+			}
+
+			nlmsg_set_src(*nlh, &from);
+			if (creds)
+				nlmsg_set_creds(*nlh, creds);
+		} else {
+			struct genlmsghdr *gnlh = nlmsg_data(lnlh);
+
+			ipcon_warn("Message received (cmd: %d) dopped!\n",
+					gnlh->cmd);
+		}
+
+		if (!wait_ack)
+			break;
+
+	} while (1);
+
+	if (lnlh)
+		free(lnlh);
 
 	return ret;
 }
 
 static int ipcon_send_msg(struct ipcon_channel *ic, __u32 port,
-			struct nl_msg *msg, int need_ack)
+			struct nl_msg *msg)
 {
 	int ret = 0;
-	uint32_t  old_peer_port;
+	struct sockaddr_nl dst;
 
-	if (!ic || !ic->sk || !msg)
-		return -EINVAL;
+	memset(&dst, 0, sizeof(dst));
+	dst.nl_family = AF_NETLINK;
+	dst.nl_pid = port;
+	dst.nl_groups = 0;
+	nlmsg_set_dst(msg, &dst);
 
-	if (need_ack)
-		nl_socket_enable_auto_ack(ic->sk);
-
-	old_peer_port = nl_socket_get_peer_port(ic->sk);
-	nl_socket_set_peer_port(ic->sk, port);
 	ret = nl_send_auto(ic->sk, msg);
-	nl_socket_set_peer_port(ic->sk, old_peer_port);
-
-	if (ret >= 0)
-		ret = 0;
-	else
+	if (ret < 0)
 		ret = libnl_error(ret);
+	else
+		ret = 0;
 
-	nl_socket_disable_auto_ack(ic->sk);
+	return ret;
+}
+
+static int ipcon_send_rcv_msg(struct ipcon_channel *ic, __u32 port,
+			struct nl_msg *msg, struct nl_msg **ack)
+{
+	int ret = 0;
+
+	do {
+		ret = ipcon_send_msg(ic, port, msg);
+		if (ret < 0)
+			break;
+
+		ret = ipcon_rcv_msg(ic, ack, 1);
+
+	} while (0);
 
 	return ret;
 }
@@ -355,7 +206,6 @@ static inline int ipcon_chan_init(struct ipcon_channel *ic)
 	if (ret)
 		return ret;
 
-	lh_init(&ic->mq);
 	ic->family = 0;
 
 	ic->sk = nl_socket_alloc();
@@ -381,14 +231,6 @@ static inline void ipcon_chan_destory(struct ipcon_channel *ic)
 		return;
 
 	nl_socket_free(ic->sk);
-	if (le_getcnt(&ic->mq)) {
-		struct nl_msg *msg = NULL;
-
-		do {
-			msg = dequeue_msg(&ic->mq);
-			nlmsg_free(msg);
-		} while (msg);
-	}
 	ic->family = 0;
 	pthread_mutex_destroy(&ic->mutex);
 };
@@ -432,7 +274,7 @@ IPCON_HANDLER ipcon_create_handler(void)
 
 		/* We don't required a ACK by default */
 		nl_socket_disable_auto_ack(iph->chan.sk);
-		nl_socket_disable_auto_ack(iph->ctrl_chan.sk);
+		nl_socket_enable_auto_ack(iph->ctrl_chan.sk);
 
 		/* Register peer
 		 * The aim is to increase the ipcon driver reference counter so
@@ -453,19 +295,11 @@ IPCON_HANDLER ipcon_create_handler(void)
 		nla_put_u32(msg, IPCON_ATTR_PEER_CNT, 2);
 
 		ipcon_ctrl_lock(iph);
-		ret = ipcon_send_msg(&iph->ctrl_chan, 0, msg, 1);
-
-		nlmsg_free(msg);
-		if (!ret) {
-			do {
-				ret = ipcon_rcv_msg(&iph->ctrl_chan,
-					0, IPCON_PEER_REG, NULL, NULL);
-
-			} while (ret == -EAGAIN);
-		}
+		ret = ipcon_send_rcv_msg(&iph->ctrl_chan, 0, msg, NULL);
 		ipcon_ctrl_unlock(iph);
+		nlmsg_free(msg);
 
-		if (!ret)
+		if (ret < 0)
 			break;
 
 		return iph_to_handler(iph);
@@ -520,7 +354,6 @@ int ipcon_register_service(IPCON_HANDLER handler, char *name)
 	if (!srv_name_len || srv_name_len > IPCON_MAX_NAME_LEN)
 		return -EINVAL;
 
-
 	do {
 		msg = nlmsg_alloc();
 		if (!msg) {
@@ -536,17 +369,10 @@ int ipcon_register_service(IPCON_HANDLER handler, char *name)
 		nla_put_string(msg, IPCON_ATTR_SRV_NAME, name);
 
 		ipcon_ctrl_lock(iph);
-		ret = ipcon_send_msg(&iph->ctrl_chan, 0, msg, 1);
+		ret = ipcon_send_rcv_msg(&iph->ctrl_chan, 0, msg, NULL);
+		ipcon_ctrl_unlock(iph);
 		nlmsg_free(msg);
 
-		if (!ret) {
-			do {
-				ret = ipcon_rcv_msg(&iph->ctrl_chan,
-						0, IPCON_SRV_REG, NULL, NULL);
-
-			} while (ret == -EAGAIN);
-		}
-		ipcon_ctrl_unlock(iph);
 	} while (0);
 
 
@@ -578,21 +404,14 @@ int ipcon_register_group(IPCON_HANDLER handler, char *name)
 		}
 		ipcon_put(msg, &iph->ctrl_chan, 0, IPCON_GRP_REG);
 		nla_put_u32(msg, IPCON_ATTR_MSG_TYPE, IPCON_MSG_UNICAST);
-		nla_put_u32(msg, IPCON_ATTR_PORT, iph->ctrl_chan.port);
+		nla_put_u32(msg, IPCON_ATTR_PORT, iph->chan.port);
 		nla_put_string(msg, IPCON_ATTR_GRP_NAME, name);
 
 		ipcon_ctrl_lock(iph);
-		ret = ipcon_send_msg(&iph->ctrl_chan, 0, msg, 1);
+		ret = ipcon_send_rcv_msg(&iph->ctrl_chan, 0, msg, NULL);
+		ipcon_ctrl_unlock(iph);
 		nlmsg_free(msg);
 
-		if (!ret) {
-			do {
-				ret = ipcon_rcv_msg(&iph->ctrl_chan,
-					0, IPCON_GRP_REG, NULL, NULL);
-
-			} while (ret == -EAGAIN);
-		}
-		ipcon_ctrl_unlock(iph);
 	} while (0);
 
 
@@ -632,16 +451,9 @@ int ipcon_unregister_service(IPCON_HANDLER handler, char *name)
 		nla_put_string(msg, IPCON_ATTR_SRV_NAME, name);
 
 		ipcon_ctrl_lock(iph);
-		ret = ipcon_send_msg(&iph->ctrl_chan, 0, msg, 1);
-		nlmsg_free(msg);
-
-		if (!ret) {
-			do {
-				ret = ipcon_rcv_msg(&iph->ctrl_chan,
-						0, IPCON_SRV_UNREG, NULL, NULL);
-			} while (ret == -EAGAIN);
-		}
+		ret = ipcon_send_rcv_msg(&iph->ctrl_chan, 0, msg, NULL);
 		ipcon_ctrl_unlock(iph);
+		nlmsg_free(msg);
 	} while (0);
 
 
@@ -664,6 +476,7 @@ int ipcon_find_service(IPCON_HANDLER handler, char *name, __u32 *srv_port)
 	int srv_name_len;
 	struct nlmsghdr *nlh = NULL;
 	struct nl_msg *msg = NULL;
+	struct nl_msg *rmsg = NULL;
 	struct nlattr *tb[NUM_IPCON_ATTR];
 
 	if (!iph || !name)
@@ -687,38 +500,16 @@ int ipcon_find_service(IPCON_HANDLER handler, char *name, __u32 *srv_port)
 		nla_put_string(msg, IPCON_ATTR_SRV_NAME, name);
 
 		ipcon_ctrl_lock(iph);
-		ret = ipcon_send_msg(&iph->ctrl_chan, 0, msg, 0);
+		ret = ipcon_send_rcv_msg(&iph->ctrl_chan, 0, msg, &rmsg);
+		ipcon_ctrl_unlock(iph);
 		nlmsg_free(msg);
 
 		if (ret < 0) {
-			ipcon_ctrl_unlock(iph);
 			ipcon_err("IPCON_SRV_RESLOVE cmd failed.\n");
 			break;
 		}
 
-		/*
-		 * IPCON_SRV_RESLOVE command is sent without NLM_ACK flag.
-		 * there will not be nlerror come if no error happens.
-		 * if service found, a reply message with portid set in
-		 * IPCON_ATTR_PORT, if service not found, IPCON_ATTR_PORT will
-		 * not exist.
-		 */
-		do {
-			ret = ipcon_rcv_msg(&iph->ctrl_chan,
-					0,
-					IPCON_SRV_RESLOVE,
-					&msg,
-					NULL);
-		} while (ret == -EAGAIN);
-
-		ipcon_ctrl_unlock(iph);
-
-		if (ret < 0) {
-			ipcon_err("IPCON_SRV_RESLOVE response failed.\n");
-			break;
-		}
-
-		nlh = nlmsg_hdr(msg);
+		nlh = nlmsg_hdr(rmsg);
 		ret = genlmsg_parse(nlh,
 				IPCON_HDR_SIZE,
 				tb,
@@ -736,11 +527,9 @@ int ipcon_find_service(IPCON_HANDLER handler, char *name, __u32 *srv_port)
 		else
 			ret = -ENOENT;
 
-
-		nlmsg_free(msg);
+		nlmsg_free(rmsg);
 
 	} while (0);
-
 
 	return ret;
 }
@@ -753,6 +542,7 @@ static int ipcon_get_group(struct ipcon_peer_handler *iph, char *srvname,
 	int srv_name_len;
 	struct nlmsghdr *nlh = NULL;
 	struct nl_msg *msg = NULL;
+	struct nl_msg *rmsg = NULL;
 	struct nlattr *tb[NUM_IPCON_ATTR];
 
 	do {
@@ -770,38 +560,16 @@ static int ipcon_get_group(struct ipcon_peer_handler *iph, char *srvname,
 		if (rcv_last_msg)
 			nla_put_flag(msg, IPCON_ATTR_FLAG);
 
-		ret = ipcon_send_msg(&iph->ctrl_chan, 0, msg, 0);
+		ret = ipcon_send_rcv_msg(&iph->ctrl_chan, 0, msg, &rmsg);
 		nlmsg_free(msg);
-		msg = NULL;
 
 		if (ret < 0) {
-			ipcon_err("IPCON_GRP_RESLOVE cmd failed.\n");
+			ipcon_err("IPCON_GRP_RESLOVE: %s(%d)\n",
+					strerror(-ret), -ret);
 			break;
 		}
 
-		/*
-		 * IPCON_GRP_RESLOVE command is sent without NLM_ACK flag.
-		 * there will not be nlerror come if no error happens.
-		 * if group found, a reply message with portid set in
-		 * IPCON_ATTR_GROUP, if service not found, IPCON_ATTR_GROUP will
-		 * not exist.
-		 */
-		do {
-			ret = ipcon_rcv_msg(&iph->ctrl_chan,
-					0,
-					IPCON_GRP_RESLOVE,
-					&msg,
-					NULL);
-
-		} while (ret == -EAGAIN);
-
-		if (ret < 0) {
-			ipcon_err("IPCON_GRP_RESLOVE fail: %s(%d).\n",
-				strerror(-ret), -ret);
-			break;
-		}
-
-		nlh = nlmsg_hdr(msg);
+		nlh = nlmsg_hdr(rmsg);
 		ret = genlmsg_parse(nlh,
 				IPCON_HDR_SIZE,
 				tb,
@@ -820,10 +588,8 @@ static int ipcon_get_group(struct ipcon_peer_handler *iph, char *srvname,
 		}
 
 		*groupid = nla_get_u32(tb[IPCON_ATTR_GROUP]);
-
+		nlmsg_free(rmsg);
 	} while (0);
-
-	nlmsg_free(msg);
 
 	return ret;
 }
@@ -846,7 +612,6 @@ int ipcon_join_group(IPCON_HANDLER handler, char *srvname, char *grpname,
 	int srv_name_len = 0;
 	int grp_name_len = 0;
 	__u32 groupid = 0;
-
 
 	if (!iph || !srvname || !grpname)
 		return -EINVAL;
@@ -940,20 +705,10 @@ int ipcon_unregister_group(IPCON_HANDLER handler, char *name)
 		nla_put_string(msg, IPCON_ATTR_GRP_NAME, name);
 
 		ipcon_ctrl_lock(iph);
-		ret = ipcon_send_msg(&iph->ctrl_chan, 0, msg, 1);
+		ret = ipcon_send_rcv_msg(&iph->ctrl_chan, 0, msg, NULL);
+		ipcon_ctrl_unlock(iph);
 		nlmsg_free(msg);
 
-		if (!ret) {
-			do {
-				ret = ipcon_rcv_msg(&iph->ctrl_chan,
-						0,
-						IPCON_GRP_UNREG,
-						NULL,
-						NULL);
-			} while (ret == -EAGAIN);
-		}
-
-		ipcon_ctrl_unlock(iph);
 	} while (0);
 
 
@@ -998,7 +753,7 @@ int ipcon_send_unicast(IPCON_HANDLER handler, __u32 port,
 		nla_put_data(msg, IPCON_ATTR_DATA,
 			(struct nl_data *)&ipcon_data);
 
-		ret = ipcon_send_msg(&iph->chan, port, msg, 0);
+		ret = ipcon_send_msg(&iph->chan, port, msg);
 
 	} while (0);
 
@@ -1048,19 +803,9 @@ int ipcon_send_multicast(IPCON_HANDLER handler, char *name, void *buf,
 			(struct nl_data *)&ipcon_data);
 
 		ipcon_ctrl_lock(iph);
-		ret = ipcon_send_msg(&iph->ctrl_chan, 0, msg, 1);
-		nlmsg_free(msg);
-
-		if (!ret) {
-			do {
-				ret = ipcon_rcv_msg(&iph->ctrl_chan,
-						0,
-						IPCON_MULTICAST_MSG,
-						NULL,
-						NULL);
-			} while (ret == -EAGAIN);
-		}
+		ret = ipcon_send_rcv_msg(&iph->ctrl_chan, 0, msg, NULL);
 		ipcon_ctrl_unlock(iph);
+		nlmsg_free(msg);
 
 	} while (0);
 
@@ -1171,6 +916,7 @@ int ipcon_rcv_timeout(IPCON_HANDLER handler, struct ipcon_msg *im,
 		struct nlmsghdr *nlh = NULL;
 		struct nlattr *tb[NUM_IPCON_ATTR];
 		int len;
+		fd_set rfds;
 
 		if (timeout) {
 			ret = ipcon_com_trylock(iph);
@@ -1195,17 +941,22 @@ int ipcon_rcv_timeout(IPCON_HANDLER handler, struct ipcon_msg *im,
 			ipcon_com_lock(iph);
 		}
 
-		msg = nlmsg_alloc();
-		if (!msg) {
-			ret = -ENOMEM;
-			break;
+		if (timeout) {
+			FD_ZERO(&rfds);
+			FD_SET(fd, &rfds);
+
+			ret = select(fd + 1, &rfds, NULL, NULL, timeout);
+			if (!ret) {
+				ipcon_com_unlock(iph);
+				ret = -ETIMEDOUT;
+				break;
+			} else if (ret < 0) {
+				ret = -errno;
+				break;
+			}
 		}
 
-		ret = ipcon_rcv_msg(&iph->chan,
-				IPCON_ANY_PORT,
-				IPCON_USR_MSG,
-				&msg,
-				timeout);
+		ret = ipcon_rcv_msg(&iph->chan, &msg, 0);
 
 		ipcon_com_unlock(iph);
 
