@@ -19,9 +19,9 @@
 #define ipcon_err(fmt, ...) \
 	printf("[ipcon_user] %s-%d "fmt, __func__, __LINE__, ##__VA_ARGS__)
 
-#define srv_name	"ipcon_server"
-#define grp_name	"str_msg"
-#define peer_name	"ipcon_user"
+#define SRV_NAME	"ipcon_server"
+#define GRP_NAME	"str_msg"
+#define PEER_NAME	"ipcon_user"
 __u32 srv_port;
 int srv_group_connected;
 
@@ -37,36 +37,46 @@ static void ipcon_kevent(IPCON_HANDLER handler, struct ipcon_msg *im)
 
 	switch (ik->type) {
 	case IPCON_EVENT_GRP_ADD:
-		if (!srv_group_connected && !strcmp(ik->grp.name, grp_name)) {
-			ret = ipcon_join_group(handler, srv_name, grp_name, 1);
+		if (srv_group_connected)
+			break;
+		if (!strcmp(ik->grp.group_name, GRP_NAME) &&
+			!strcmp(ik->grp.peer_name, SRV_NAME)) {
+			ret = ipcon_join_group(handler, SRV_NAME, GRP_NAME, 1);
 			if (ret < 0) {
 				ipcon_err("Failed to join group %s: %s(%d)\n",
-					grp_name,
+					GRP_NAME,
 					strerror(-ret),
 					-ret);
 			} else {
 				ipcon_info("Success to join group %s.\n",
-					grp_name);
+					GRP_NAME);
 				srv_group_connected = 1;
 			}
 		}
 		break;
+
 	case IPCON_EVENT_GRP_REMOVE:
-		if (srv_group_connected && !strcmp(ik->grp.name, grp_name)) {
-			ret = ipcon_leave_group(handler, srv_name, grp_name);
+		if (!srv_group_connected)
+			break;
+
+		if (!strcmp(ik->grp.group_name, GRP_NAME) &&
+			!strcmp(ik->grp.peer_name, SRV_NAME)) {
+
+			ret = ipcon_leave_group(handler, SRV_NAME, GRP_NAME);
 			if (ret < 0) {
 				ipcon_err("Failed to leave group %s: %s(%d)\n",
-					grp_name,
+					GRP_NAME,
 					strerror(-ret),
 					-ret);
 			} else {
 				ipcon_info("Success to leave group %s.\n",
-					grp_name);
+					GRP_NAME);
 			}
 			srv_group_connected = 0;
 
 		}
 		break;
+
 	case IPCON_EVENT_PEER_REMOVE:
 		ipcon_err("peer %lu is remove\n",
 				(unsigned long)ik->peer.port);
@@ -85,8 +95,11 @@ int main(int argc, char *argv[])
 	unsigned int should_quit = 0;
 
 	do {
+		if (argc != 2)
+			exit(1);
+
 		/* Create server handler */
-		handler = ipcon_create_handler(peer_name);
+		handler = ipcon_create_handler(argv[1]);
 		if (!handler) {
 			ipcon_err("Failed to create libipcon handler.\n");
 			break;
@@ -105,10 +118,10 @@ int main(int argc, char *argv[])
 
 		ipcon_info("Joined %s group.\n", IPCON_KERNEL_GROUP);
 
-		ret = ipcon_join_group(handler, srv_name, grp_name, 1);
+		ret = ipcon_join_group(handler, SRV_NAME, GRP_NAME, 1);
 		if (!ret) {
 			srv_group_connected = 1;
-			ipcon_info("Joined %s group.\n", grp_name);
+			ipcon_info("Joined %s group.\n", GRP_NAME);
 		}
 
 		while (!should_quit) {
@@ -127,13 +140,13 @@ int main(int argc, char *argv[])
 				continue;
 			}
 
-			if (!strcmp(im.group, grp_name)) {
+			if (!strcmp(im.group, GRP_NAME)) {
 				if (!strcmp(im.buf, "bye")) {
 					ipcon_info("Quit...\n");
 					should_quit = 1;
 				} else {
-					ipcon_info("Msg from %s(len=%d):%s\n",
-						grp_name, im.len, im.buf);
+					ipcon_info("%s received Msg from %s(len=%d):%s\n",
+						argv[1], GRP_NAME, im.len, im.buf);
 				}
 
 				continue;

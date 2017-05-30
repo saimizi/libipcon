@@ -18,8 +18,8 @@
 #define ipcon_err(fmt, ...) \
 	fprintf(stderr, "[ipcon_server_poll] Error: "fmt, ##__VA_ARGS__)
 
-#define peer_name	"ipcon_server_poll"
-#define grp_name	"str_msg"
+#define PEER_NAME	"ipcon_server_poll"
+#define GRP_NAME	"str_msg"
 __u32 sender_port;
 
 static void ipcon_kevent(struct ipcon_msg *im)
@@ -63,7 +63,7 @@ static int normal_msg_handler(IPCON_HANDLER handler, struct ipcon_msg *im)
 				"bye",
 				strlen("bye") + 1);
 
-		ipcon_send_multicast(handler, grp_name,
+		ipcon_send_multicast(handler, GRP_NAME,
 				"bye",
 				strlen("bye") + 1);
 
@@ -83,7 +83,7 @@ static int normal_msg_handler(IPCON_HANDLER handler, struct ipcon_msg *im)
 				"OK",
 				strlen("OK") + 1);
 
-		ret = ipcon_send_multicast(handler, grp_name, im->buf, im->len);
+		ret = ipcon_send_multicast(handler, GRP_NAME, im->buf, im->len);
 		if (ret < 0)
 			ipcon_err("Failed to send mutlcast message:%s(%d).",
 				strerror(-ret), -ret);
@@ -99,7 +99,7 @@ int main(int argc, char *argv[])
 	IPCON_HANDLER	handler;
 	int should_quit = 0;
 
-	handler = ipcon_create_handler(peer_name);
+	handler = ipcon_create_handler(PEER_NAME);
 	if (!handler) {
 		ipcon_err("Failed to create handler\n");
 		return 1;
@@ -119,14 +119,14 @@ int main(int argc, char *argv[])
 
 		ipcon_info("Joined %s group.\n", IPCON_KERNEL_GROUP);
 
-		ret = ipcon_register_group(handler, grp_name);
+		ret = ipcon_register_group(handler, GRP_NAME);
 		if (ret < 0) {
 			ipcon_err("Failed to register group: %s (%d)\n",
 					strerror(-ret), -ret);
 			break;
 		}
 
-		ipcon_info("Register group %s succeed.\n", grp_name);
+		ipcon_info("Register group %s succeed.\n", GRP_NAME);
 
 		while (!should_quit) {
 			struct ipcon_msg im;
@@ -144,7 +144,7 @@ int main(int argc, char *argv[])
 
 			ret = select(fd + 1, &rfds, NULL, NULL, &timeout);
 			if (ret == 0) {
-				ipcon_info("%s timeout.\n", peer_name);
+				ipcon_info("%s timeout.\n", PEER_NAME);
 				continue;
 			}
 
@@ -158,13 +158,13 @@ int main(int argc, char *argv[])
 			ret = ipcon_rcv_timeout(handler, &im, &timeout);
 			if (ret < 0) {
 				if (ret == -ETIMEDOUT) {
-					ipcon_info("%s timeout.\n", peer_name);
-					ipcon_send_multicast(handler, grp_name,
+					ipcon_info("%s timeout.\n", PEER_NAME);
+					ipcon_send_multicast(handler, GRP_NAME,
 							"bye",
 							strlen("bye") + 1);
 					should_quit = 1;
 				} else {
-					ipcon_info("%s : %s (%d).\n", peer_name,
+					ipcon_info("%s : %s (%d).\n", PEER_NAME,
 						strerror(-ret), -ret);
 				}
 				continue;
@@ -192,13 +192,13 @@ int main(int argc, char *argv[])
 			}
 		}
 
-		ret = ipcon_unregister_group(handler, grp_name);
+		ret = ipcon_unregister_group(handler, GRP_NAME);
 		if (ret < 0) {
 			ipcon_err("Failed to unregister group: %s (%d)\n",
 					strerror(-ret), -ret);
 			break;
 		}
-		ipcon_info("Unregister group %s succeed.\n", grp_name);
+		ipcon_info("Unregister group %s succeed.\n", GRP_NAME);
 
 	} while (0);
 
