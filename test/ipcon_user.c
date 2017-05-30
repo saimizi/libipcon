@@ -78,8 +78,8 @@ static void ipcon_kevent(IPCON_HANDLER handler, struct ipcon_msg *im)
 		break;
 
 	case IPCON_EVENT_PEER_REMOVE:
-		ipcon_err("peer %lu is remove\n",
-				(unsigned long)ik->peer.port);
+		ipcon_err("peer %s@%lu is remove\n",
+				ik->peer.name, (unsigned long)ik->peer.port);
 		break;
 	default:
 		break;
@@ -95,11 +95,8 @@ int main(int argc, char *argv[])
 	unsigned int should_quit = 0;
 
 	do {
-		if (argc != 2)
-			exit(1);
-
 		/* Create server handler */
-		handler = ipcon_create_handler(argv[1]);
+		handler = ipcon_create_handler(NULL);
 		if (!handler) {
 			ipcon_err("Failed to create libipcon handler.\n");
 			break;
@@ -145,8 +142,8 @@ int main(int argc, char *argv[])
 					ipcon_info("Quit...\n");
 					should_quit = 1;
 				} else {
-					ipcon_info("%s received Msg from %s(len=%d):%s\n",
-						argv[1], GRP_NAME, im.len, im.buf);
+					ipcon_info("received Msg from %s(len=%d):%s\n",
+						GRP_NAME, im.len, im.buf);
 				}
 
 				continue;
