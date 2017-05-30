@@ -1,7 +1,9 @@
 #ifndef __LIBIPCON_H__
 #define __LIBIPCON_H__
 
+#include <string.h>
 #include "ipcon.h"
+
 
 #define IPCON_HANDLER	void *
 
@@ -18,6 +20,20 @@ struct ipcon_msg {
 	char buf[IPCON_MAX_MSG_LEN];
 	__u32 len;
 };
+
+static inline int vaild_peer_name(char *name)
+{
+	size_t len;
+
+	if (!name)
+		return 0;
+
+	len = strlen(name);
+	if (len > 0 && len < IPCON_MAX_NAME_LEN - 1)
+		return 1;
+
+	return 0;
+}
 
 
 IPCON_HANDLER ipcon_create_handler(char *name);

@@ -281,11 +281,11 @@ IPCON_HANDLER ipcon_create_handler(char *peer_name)
 		} else {
 			name = peer_name;
 		}
-		ipcon_dbg("Peer name: %s\n", name);
 
-		name_len = strlen(name);
-		if (!name_len || (name_len > IPCON_MAX_NAME_LEN - 1))
+		if (!vaild_peer_name(name))
 			break;
+
+		ipcon_dbg("Peer name: %s\n", name);
 
 		iph = malloc(sizeof(*iph));
 		if (!iph)
