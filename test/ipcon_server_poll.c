@@ -106,7 +106,8 @@ int main(int argc, char *argv[])
 	}
 
 	do {
-		ret = ipcon_join_group(handler, IPCON_KERNEL_GROUP, 0);
+		ret = ipcon_join_group(handler, IPCON_GENL_NAME,
+				IPCON_KERNEL_GROUP, 0);
 		if (ret < 0) {
 			ipcon_err("Failed to join %s group :%s(%d).\n",
 					IPCON_KERNEL_GROUP,
