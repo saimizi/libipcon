@@ -62,13 +62,13 @@ struct ipcon_rcv_msg_info {
 static struct nla_policy ipcon_policy[NUM_IPCON_ATTR] = {
 	[IPCON_ATTR_MSG_TYPE] = {.type = NLA_U32},
 	[IPCON_ATTR_PORT] = {.type = NLA_U32},
-	[IPCON_ATTR_SRV_NAME] = {.type = NLA_NUL_STRING,
-				.maxlen = IPCON_MAX_NAME_LEN - 1 },
 	[IPCON_ATTR_GROUP] = {.type = NLA_U32},
 	[IPCON_ATTR_GRP_NAME] = {.type = NLA_NUL_STRING,
 				.maxlen = IPCON_MAX_NAME_LEN - 1 },
 	[IPCON_ATTR_DATA] = {.type = NLA_BINARY, .maxlen = IPCON_MAX_MSG_LEN},
 	[IPCON_ATTR_FLAG] = {.type = NLA_FLAG},
+	[IPCON_ATTR_PEER_NAME] = {.type = NLA_NUL_STRING,
+				.maxlen = IPCON_MAX_NAME_LEN - 1 },
 	[IPCON_ATTR_PEER_CNT] = {.type = NLA_U32},
 };
 
@@ -240,11 +240,19 @@ static inline void ipcon_chan_destory(struct ipcon_channel *ic)
  * Create and return a ipcon handler with an internal structure ipcon_mng_info.
  */
 
-IPCON_HANDLER ipcon_create_handler(void)
+IPCON_HANDLER ipcon_create_handler(char *name)
 {
 	struct ipcon_peer_handler *iph = NULL;
 	int gi = 0;
 	int ret = 0;
+	size_t name_len = 0;
+
+	if (!name)
+		return NULL;
+
+	name_len = strlen(name);
+	if (!name_len || (name_len > IPCON_MAX_NAME_LEN - 1))
+		return NULL;
 
 	iph = malloc(sizeof(*iph));
 	if (!iph)
@@ -291,6 +299,8 @@ IPCON_HANDLER ipcon_create_handler(void)
 
 		ipcon_put(msg, &iph->ctrl_chan, 0, IPCON_PEER_REG);
 		nla_put_u32(msg, IPCON_ATTR_MSG_TYPE, IPCON_MSG_UNICAST);
+		nla_put_u32(msg, IPCON_ATTR_PORT, iph->chan.port);
+		nla_put_string(msg, IPCON_ATTR_PEER_NAME, name);
 		/* 1 for ctrl channel, another for communication channel */
 		nla_put_u32(msg, IPCON_ATTR_PEER_CNT, 2);
 
@@ -329,54 +339,6 @@ void ipcon_free_handler(IPCON_HANDLER handler)
 	ipcon_chan_destory(&iph->chan);
 
 	free(iph);
-}
-
-/*
- * ipcon_register_service
- *
- * Register a service point. A service must have a name.
- */
-
-int ipcon_register_service(IPCON_HANDLER handler, char *name)
-{
-	struct ipcon_peer_handler *iph = handler_to_iph(handler);
-	void *hdr = NULL;
-	int ret = 0;
-	int srv_name_len;
-	struct nlmsghdr *nlh = NULL;
-	struct nl_msg *msg = NULL;
-	struct nlattr *tb[NUM_IPCON_ATTR];
-
-	if (!iph || !name)
-		return -EINVAL;
-
-	srv_name_len = (int)strlen(name);
-	if (!srv_name_len || srv_name_len > IPCON_MAX_NAME_LEN)
-		return -EINVAL;
-
-	do {
-		msg = nlmsg_alloc();
-		if (!msg) {
-			ret = -ENOMEM;
-			break;
-		}
-
-		ipcon_put(msg, &iph->ctrl_chan, 0, IPCON_SRV_REG);
-		nla_put_u32(msg, IPCON_ATTR_MSG_TYPE, IPCON_MSG_UNICAST);
-		ipcon_com_lock(iph);
-		nla_put_u32(msg, IPCON_ATTR_PORT, iph->chan.port);
-		ipcon_com_unlock(iph);
-		nla_put_string(msg, IPCON_ATTR_SRV_NAME, name);
-
-		ipcon_ctrl_lock(iph);
-		ret = ipcon_send_rcv_msg(&iph->ctrl_chan, 0, msg, NULL);
-		ipcon_ctrl_unlock(iph);
-		nlmsg_free(msg);
-
-	} while (0);
-
-
-	return ret;
 }
 
 int ipcon_register_group(IPCON_HANDLER handler, char *name)
@@ -419,48 +381,6 @@ int ipcon_register_group(IPCON_HANDLER handler, char *name)
 }
 
 /*
- * ipcon_unregister_service
- *
- * Remove service registration. this make service point be an anonymous one.
- */
-
-int ipcon_unregister_service(IPCON_HANDLER handler, char *name)
-{
-	int ret = 0;
-	int srv_name_len;
-	struct ipcon_peer_handler *iph = handler_to_iph(handler);
-	struct nl_msg *msg = NULL;
-
-	if (!iph || !name)
-		return -EINVAL;
-
-	srv_name_len = (int)strlen(name);
-	if (!srv_name_len || srv_name_len > IPCON_MAX_NAME_LEN)
-		return -EINVAL;
-
-
-	do {
-		msg = nlmsg_alloc();
-		if (!msg) {
-			ret = -ENOMEM;
-			break;
-		}
-
-		ipcon_put(msg, &iph->ctrl_chan, 0, IPCON_SRV_UNREG);
-		nla_put_u32(msg, IPCON_ATTR_MSG_TYPE, IPCON_MSG_UNICAST);
-		nla_put_string(msg, IPCON_ATTR_SRV_NAME, name);
-
-		ipcon_ctrl_lock(iph);
-		ret = ipcon_send_rcv_msg(&iph->ctrl_chan, 0, msg, NULL);
-		ipcon_ctrl_unlock(iph);
-		nlmsg_free(msg);
-	} while (0);
-
-
-	return ret;
-}
-
-/*
  * ipcon_find_service
  *
  * Reslove the information of a service point by name.
@@ -468,7 +388,7 @@ int ipcon_unregister_service(IPCON_HANDLER handler, char *name)
  * kernel, queue it into the message queue.
  *
  */
-int ipcon_find_service(IPCON_HANDLER handler, char *name, __u32 *srv_port)
+int ipcon_find_peer(IPCON_HANDLER handler, char *name, __u32 *srv_port)
 {
 	struct ipcon_peer_handler *iph = handler_to_iph(handler);
 	void *hdr = NULL;
@@ -781,6 +701,7 @@ int ipcon_send_multicast(IPCON_HANDLER handler, char *name, void *buf,
 		ipcon_put(msg, &iph->ctrl_chan, 0, IPCON_MULTICAST_MSG);
 
 		nla_put_u32(msg, IPCON_ATTR_MSG_TYPE, IPCON_MSG_UNICAST);
+		nla_put_u32(msg, IPCON_ATTR_PORT, iph->chan.port);
 		nla_put_string(msg, IPCON_ATTR_GRP_NAME, name);
 		ipcon_data.d_size = size;
 		ipcon_data.d_data = buf;
