@@ -21,6 +21,7 @@
 
 #define srv_name	"ipcon_server"
 #define grp_name	"str_msg"
+#define peer_name	"ipcon_user"
 __u32 srv_port;
 int srv_group_connected;
 
@@ -52,7 +53,7 @@ static void ipcon_kevent(IPCON_HANDLER handler, struct ipcon_msg *im)
 		break;
 	case IPCON_EVENT_GRP_REMOVE:
 		if (srv_group_connected && !strcmp(ik->grp.name, grp_name)) {
-			ret = ipcon_leave_group(handler, grp_name);
+			ret = ipcon_leave_group(handler, srv_name, grp_name);
 			if (ret < 0) {
 				ipcon_err("Failed to leave group %s: %s(%d)\n",
 					grp_name,
@@ -68,7 +69,7 @@ static void ipcon_kevent(IPCON_HANDLER handler, struct ipcon_msg *im)
 		break;
 	case IPCON_EVENT_PEER_REMOVE:
 		ipcon_err("peer %lu is remove\n",
-				(unsigned long)ik->peer.portid);
+				(unsigned long)ik->peer.port);
 		break;
 	default:
 		break;
@@ -85,7 +86,7 @@ int main(int argc, char *argv[])
 
 	do {
 		/* Create server handler */
-		handler = ipcon_create_handler();
+		handler = ipcon_create_handler(peer_name);
 		if (!handler) {
 			ipcon_err("Failed to create libipcon handler.\n");
 			break;

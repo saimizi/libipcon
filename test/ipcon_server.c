@@ -18,7 +18,7 @@
 #define ipcon_err(fmt, ...) \
 	fprintf(stderr, "[ipcon_server] Error: "fmt, ##__VA_ARGS__)
 
-#define srv_name	"ipcon_server"
+#define peer_name	"ipcon_server"
 #define grp_name	"str_msg"
 __u32 sender_port;
 
@@ -33,10 +33,10 @@ static void ipcon_kevent(struct ipcon_msg *im)
 
 	switch (ik->type) {
 	case IPCON_EVENT_PEER_REMOVE:
-		if (ik->peer.portid == sender_port) {
+		if (ik->peer.port == sender_port) {
 			sender_port = 0;
 			ipcon_info("Detected sender@%lu removed.\n",
-				 (unsigned long)ik->peer.portid);
+				 (unsigned long)ik->peer.port);
 		}
 		break;
 	default:
@@ -99,7 +99,7 @@ int main(int argc, char *argv[])
 	IPCON_HANDLER	handler;
 	int should_quit = 0;
 
-	handler = ipcon_create_handler();
+	handler = ipcon_create_handler(peer_name);
 	if (!handler) {
 		ipcon_err("Failed to create handler\n");
 		return 1;
@@ -118,21 +118,10 @@ int main(int argc, char *argv[])
 		}
 
 		ipcon_info("Joined %s group.\n", IPCON_KERNEL_GROUP);
-
-		ret = ipcon_register_service(handler, srv_name);
-		if (ret < 0) {
-			ipcon_err("Failed to register service: %s (%d)\n",
-					strerror(-ret), -ret);
-			break;
-		}
-
-		ipcon_info("Register service %s succeed.\n", srv_name);
-
 		ret = ipcon_register_group(handler, grp_name);
 		if (ret < 0) {
 			ipcon_err("Failed to register group: %s (%d)\n",
 					strerror(-ret), -ret);
-			ipcon_unregister_service(handler, srv_name);
 			break;
 		}
 
@@ -166,14 +155,6 @@ int main(int argc, char *argv[])
 					(unsigned long)im.type);
 			}
 		}
-
-		ret = ipcon_unregister_service(handler, srv_name);
-		if (ret < 0) {
-			ipcon_err("Failed to unregister service: %s (%d)\n",
-					strerror(-ret), -ret);
-			break;
-		}
-		ipcon_info("Unregister service %s succeed.\n", srv_name);
 
 		ret = ipcon_unregister_group(handler, grp_name);
 		if (ret < 0) {

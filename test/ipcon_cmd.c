@@ -19,6 +19,7 @@
 	fprintf(stderr, "[ipcon_cmd] Error: "fmt, ##__VA_ARGS__)
 
 __u32 srv_port;
+#define peer_name	"ipcon_cmd"
 
 void ipcon_cmd_usage(void)
 {
@@ -36,14 +37,14 @@ int main(int argc, char *argv[])
 		return 1;
 	}
 
-	handler = ipcon_create_handler();
+	handler = ipcon_create_handler(peer_name);
 	if (!handler) {
 		ipcon_err("Failed to create handler\n");
 		return 1;
 	}
 
 	do {
-		ret = ipcon_find_service(handler, argv[1], &srv_port);
+		ret = ipcon_find_peer(handler, argv[1], &srv_port);
 		if (ret < 0) {
 			ipcon_err("No service %s found.\n", argv[1]);
 			break;

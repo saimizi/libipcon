@@ -19,6 +19,7 @@
 	fprintf(stderr, "[ipcon_sender] Error: "fmt, ##__VA_ARGS__)
 
 #define srv_name	"ipcon_server"
+#define peer_name	"ipcon_sender"
 __u32 srv_port;
 int should_send_msg;
 
@@ -32,16 +33,16 @@ static void ipcon_kevent(struct ipcon_msg *im)
 	ik = (struct ipcon_kevent *)im->buf;
 
 	switch (ik->type) {
-	case IPCON_EVENT_SRV_ADD:
-		if (!strcmp(ik->srv.name, srv_name) && !srv_port) {
-			srv_port = ik->srv.portid;
+	case IPCON_EVENT_PEER_ADD:
+		if (!strcmp(ik->peer.name, srv_name) && !srv_port) {
+			srv_port = ik->peer.port;
 			should_send_msg = 1;
 			ipcon_info("Detected service %s@%lu.\n",
 				srv_name, (unsigned long)srv_port);
 		}
 		break;
-	case IPCON_EVENT_SRV_REMOVE:
-		if (!strcmp(ik->srv.name, srv_name) && srv_port) {
+	case IPCON_EVENT_PEER_REMOVE:
+		if (!strcmp(ik->peer.name, srv_name) && srv_port) {
 			ipcon_info("Detected service %s@%lu removed.\n",
 				srv_name, (unsigned long)srv_port);
 			srv_port = 0;
@@ -65,7 +66,7 @@ int main(int argc, char *argv[])
 		return 1;
 	}
 
-	handler = ipcon_create_handler();
+	handler = ipcon_create_handler(peer_name);
 	if (!handler) {
 		ipcon_err("Failed to create handler\n");
 		return 1;
@@ -83,7 +84,7 @@ int main(int argc, char *argv[])
 		else
 			ipcon_info("Joined %s group.\n", IPCON_KERNEL_GROUP);
 
-		ret = ipcon_find_service(handler, srv_name, &srv_port);
+		ret = ipcon_find_peer(handler, srv_name, &srv_port);
 		if (!ret) {
 			ipcon_info("Detected service %s@%lu\n",
 					srv_name, (unsigned long)srv_port);
