@@ -12,6 +12,7 @@
 #include <netlink/genl/genl.h>
 #include <netlink/genl/ctrl.h>
 #include <pthread.h>
+#include <time.h>
 
 #include "libipcon_dbg.h"
 #include "libipcon_priv.h"
@@ -234,42 +235,71 @@ static inline void ipcon_chan_destory(struct ipcon_channel *ic)
 	pthread_mutex_destroy(&ic->mutex);
 };
 
+static char *auto_peer_name()
+{
+	int rnum = 0;
+	char *name = malloc(IPCON_MAX_NAME_LEN);
+
+#if IPCON_MAX_NAME_LEN >= 13
+
+	if (!name)
+		return NULL;
+
+	srand((unsigned int)time(NULL));
+	rnum = rand() % (9999999 - 1 + 1) + 1;
+	sprintf(name, "Anon-%lu", (unsigned long)rnum);
+#else
+#error "IPCON_MAX_NAME_LEN is too small."
+#endif
+
+	return name;
+}
+
 /*
  * ipcon_create_handler
  * Create and return a ipcon handler with an internal structure ipcon_mng_info.
  */
 
-IPCON_HANDLER ipcon_create_handler(char *name)
+IPCON_HANDLER ipcon_create_handler(char *peer_name)
 {
 	struct ipcon_peer_handler *iph = NULL;
 	int gi = 0;
 	int ret = 0;
 	size_t name_len = 0;
+	int free_name = 0;
+	char *name = NULL;
 
-	if (!name)
-		return NULL;
-
-	name_len = strlen(name);
-	if (!name_len || (name_len > IPCON_MAX_NAME_LEN - 1))
-		return NULL;
-
-	iph = malloc(sizeof(*iph));
-	if (!iph)
-		return NULL;
 
 	do {
 		int i;
 		int family;
 		struct nl_msg *msg = NULL;
 
+		if (!peer_name) {
+			name = auto_peer_name();
+			free_name = 1;
+		} else {
+			name = peer_name;
+		}
+		ipcon_dbg("Peer name: %s\n", name);
+
+		name_len = strlen(name);
+		if (!name_len || (name_len > IPCON_MAX_NAME_LEN - 1))
+			break;
+
+		iph = malloc(sizeof(*iph));
+		if (!iph)
+			break;
+
 		if (ipcon_chan_init(&iph->chan))
 			break;
-		ipcon_dbg("Communictaion channel port: %lu.\n",
+
+		ipcon_dbg("Comm port: %lu.\n",
 				(unsigned long)iph->chan.port);
 
 		if (ipcon_chan_init(&iph->ctrl_chan))
 			break;
-		ipcon_dbg("Ctrl channel port: %lu.\n",
+		ipcon_dbg("Ctrl port: %lu.\n",
 				(unsigned long)iph->ctrl_chan.port);
 
 		family = genl_ctrl_resolve(iph->ctrl_chan.sk, IPCON_GENL_NAME);
@@ -317,6 +347,9 @@ IPCON_HANDLER ipcon_create_handler(char *name)
 	ipcon_chan_destory(&iph->chan);
 	ipcon_chan_destory(&iph->ctrl_chan);
 	free(iph);
+
+	if (free_name)
+		free(name);
 
 	return NULL;
 }
@@ -480,11 +513,8 @@ static int ipcon_get_group(struct ipcon_peer_handler *iph, char *srvname,
 		ret = ipcon_send_rcv_msg(&iph->ctrl_chan, 0, msg, &rmsg);
 		nlmsg_free(msg);
 
-		if (ret < 0) {
-			ipcon_err("IPCON_GRP_RESLOVE: %s(%d)\n",
-					strerror(-ret), -ret);
+		if (ret < 0)
 			break;
-		}
 
 		nlh = nlmsg_hdr(rmsg);
 		ret = genlmsg_parse(nlh,
@@ -495,7 +525,6 @@ static int ipcon_get_group(struct ipcon_peer_handler *iph, char *srvname,
 
 		if (ret < 0) {
 			ret = libnl_error(ret);
-			ipcon_dbg("%s msg parse error with%d\n", __func__, ret);
 			break;
 		}
 
