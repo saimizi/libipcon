@@ -69,7 +69,6 @@ static struct nla_policy ipcon_policy[NUM_IPCON_ATTR] = {
 	[IPCON_ATTR_FLAG] = {.type = NLA_FLAG},
 	[IPCON_ATTR_PEER_NAME] = {.type = NLA_NUL_STRING,
 				.maxlen = IPCON_MAX_NAME_LEN - 1 },
-	[IPCON_ATTR_PEER_CNT] = {.type = NLA_U32},
 };
 
 static inline void *ipcon_put(struct nl_msg *msg, struct ipcon_channel *ic,
@@ -301,8 +300,6 @@ IPCON_HANDLER ipcon_create_handler(char *name)
 		nla_put_u32(msg, IPCON_ATTR_MSG_TYPE, IPCON_MSG_UNICAST);
 		nla_put_u32(msg, IPCON_ATTR_PORT, iph->chan.port);
 		nla_put_string(msg, IPCON_ATTR_PEER_NAME, name);
-		/* 1 for ctrl channel, another for communication channel */
-		nla_put_u32(msg, IPCON_ATTR_PEER_CNT, 2);
 
 		ipcon_ctrl_lock(iph);
 		ret = ipcon_send_rcv_msg(&iph->ctrl_chan, 0, msg, NULL);
