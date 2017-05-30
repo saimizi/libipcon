@@ -32,7 +32,7 @@ int ipcon_register_group(IPCON_HANDLER handler, char *name);
 int ipcon_unregister_group(IPCON_HANDLER handler, char *name);
 int ipcon_join_group(IPCON_HANDLER handler, char *srvname, char *grpname,
 		int rcv_last_msg);
-int ipcon_leave_group(IPCON_HANDLER handler, char *name);
+int ipcon_leave_group(IPCON_HANDLER handler, char *srvname, char *grpname);
 __u32 ipcon_get_selfport(IPCON_HANDLER handler);
 struct ipcon_srv *ipcon_get_selfsrv(IPCON_HANDLER handler);
 int ipcon_getfd(IPCON_HANDLER handler);

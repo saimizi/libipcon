@@ -7,11 +7,6 @@
 #define IPCON_ANY_CMD	IPCON_CMD_MAX
 #define IPCON_ANY_PORT	0xFFFFFFFF
 
-struct ipcon_msg_entry {
-	struct link_entry le;
-	struct nl_msg *msg;
-};
-
 struct ipcon_channel {
 	struct nl_sock *sk;
 	int family;
@@ -20,15 +15,16 @@ struct ipcon_channel {
 };
 
 struct ipcon_group_info {
-	char name[IPCON_MAX_NAME_LEN];
+	struct link_entry le; /* Must be first */
+	char grpname[IPCON_MAX_NAME_LEN];
+	char srvname[IPCON_MAX_NAME_LEN];
 	__u32 groupid;
-	struct ipcon_group_info *next;
 };
 
 struct ipcon_peer_handler {
+	struct link_entry_head grp; /* Must be first */
 	struct ipcon_channel chan;
 	struct ipcon_channel ctrl_chan;
-	struct ipcon_group_info *grp;
 };
 
 static inline void ipcon_ctrl_lock(struct ipcon_peer_handler *iph)

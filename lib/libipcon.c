@@ -270,7 +270,7 @@ IPCON_HANDLER ipcon_create_handler(void)
 			break;
 
 		iph->ctrl_chan.family = iph->chan.family = family;
-		iph->grp = NULL;
+		lh_init(&iph->grp);
 
 		/* We don't required a ACK by default */
 		nl_socket_disable_auto_ack(iph->chan.sk);
@@ -629,51 +629,36 @@ int ipcon_join_group(IPCON_HANDLER handler, char *srvname, char *grpname,
 	do {
 		struct ipcon_group_info *igi = NULL;
 
+		igi = malloc(sizeof(*igi));
+		if (!igi) {
+			ret = -ENOMEM;
+			break;
+		}
+
+		le_init(&igi->le);
+
 		ret = ipcon_get_group(iph, srvname, grpname,
 				&groupid, rcv_last_msg);
 
-		if (ret < 0)
+		if (ret < 0) {
+			free(igi);
 			break;
-
-		if (!iph->grp) {
-			iph->grp = malloc(sizeof(struct ipcon_group_info));
-			if (!iph->grp) {
-				ret = -ENOMEM;
-				break;
-			}
-
-			iph->grp->groupid = groupid;
-			strcpy(iph->grp->name, grpname);
-			iph->grp->next = NULL;
-		} else {
-
-			igi = malloc(sizeof(*igi));
-			if (!igi) {
-				ret = -ENOMEM;
-				break;
-			}
-
-			igi->groupid = groupid;
-			strcpy(igi->name, grpname);
-			igi->next = iph->grp;
-			iph->grp = igi;
 		}
+
+		igi->groupid = groupid;
+		strcpy(igi->grpname, grpname);
+		strcpy(igi->srvname, srvname);
+		le_addtail(LINK_ENTRY_HEAD(iph), LINK_ENTRY(igi));
 
 		ret = nl_socket_add_memberships(iph->chan.sk,
 					(int)groupid, 0);
 		if (ret < 0) {
-			if (igi) {
-				iph->grp = igi->next;
-				free(igi);
-			} else {
-				free(iph->grp);
-				iph->grp = NULL;
-			}
+			le_remove(LINK_ENTRY(igi));
+			free(igi);
 		}
 
 	} while (0);
 	ipcon_ctrl_unlock(iph);
-
 
 	return ret;
 }
@@ -819,30 +804,34 @@ int ipcon_send_multicast(IPCON_HANDLER handler, char *name, void *buf,
  * Unsuscribe a multicast group.
  *
  */
-int ipcon_leave_group(IPCON_HANDLER handler, char *name)
+int ipcon_leave_group(IPCON_HANDLER handler, char *srvname, char *grpname)
 {
 	struct ipcon_peer_handler *iph = handler_to_iph(handler);
 	struct ipcon_group_info *igi = NULL;
 	int ret = 0;
 	int groupid = -1;
 
-	if (!iph || !name)
+	if (!iph || !grpname)
 		return -EINVAL;
 
 	ipcon_ctrl_lock(iph);
-	igi = iph->grp;
-	while (igi) {
-		if (!strcmp(igi->name, name)) {
-			groupid = (int)igi->groupid;
+	for (igi = le_next(LINK_ENTRY(iph)); igi;
+			igi = le_next(LINK_ENTRY(igi))) {
+		if (!strcmp(igi->grpname, grpname) &&
+			!strcmp(igi->srvname, srvname)) {
 			break;
 		}
+
 	}
+
+	if (igi) {
+		ret = nl_socket_drop_membership(iph->chan.sk,
+				(int)igi->groupid);
+		if (!ret)
+			le_remove(LINK_ENTRY(igi));
+	}
+
 	ipcon_ctrl_unlock(iph);
-
-	if (groupid == -1)
-		return -EINVAL;
-
-	ret = nl_socket_drop_membership(iph->chan.sk, groupid);
 	return ret;
 
 }
