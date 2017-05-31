@@ -70,6 +70,8 @@ static struct nla_policy ipcon_policy[NUM_IPCON_ATTR] = {
 	[IPCON_ATTR_FLAG] = {.type = NLA_FLAG},
 	[IPCON_ATTR_PEER_NAME] = {.type = NLA_NUL_STRING,
 				.maxlen = IPCON_MAX_NAME_LEN - 1 },
+	[IPCON_ATTR_SRC_PEER] = {.type = NLA_NUL_STRING,
+				.maxlen = IPCON_MAX_NAME_LEN - 1 },
 };
 
 static inline void *ipcon_put(struct nl_msg *msg, struct ipcon_channel *ic,
@@ -274,7 +276,6 @@ IPCON_HANDLER ipcon_create_handler(char *peer_name)
 	int gi = 0;
 	int ret = 0;
 	size_t name_len = 0;
-	int free_name = 0;
 	char *name = NULL;
 
 
@@ -283,12 +284,10 @@ IPCON_HANDLER ipcon_create_handler(char *peer_name)
 		int family;
 		struct nl_msg *msg = NULL;
 
-		if (!peer_name) {
+		if (!peer_name)
 			name = auto_peer_name();
-			free_name = 1;
-		} else {
-			name = peer_name;
-		}
+		else
+			name = strdup(peer_name);
 
 		if (!vaild_peer_name(name))
 			break;
@@ -347,6 +346,8 @@ IPCON_HANDLER ipcon_create_handler(char *peer_name)
 		if (ret < 0)
 			break;
 
+		iph->name = name;
+
 		return iph_to_handler(iph);
 
 	} while (0);
@@ -356,7 +357,7 @@ IPCON_HANDLER ipcon_create_handler(char *peer_name)
 	ipcon_chan_destory(&iph->ctrl_chan);
 	free(iph);
 
-	if (free_name)
+	if (name)
 		free(name);
 
 	return NULL;
@@ -375,6 +376,7 @@ void ipcon_free_handler(IPCON_HANDLER handler)
 
 	ipcon_chan_destory(&iph->ctrl_chan);
 	ipcon_chan_destory(&iph->chan);
+	free(iph->name);
 
 	free(iph);
 }
@@ -683,6 +685,7 @@ int ipcon_send_unicast(IPCON_HANDLER handler, char *name,
 
 		nla_put_u32(msg, IPCON_ATTR_MSG_TYPE, IPCON_MSG_UNICAST);
 		nla_put_string(msg, IPCON_ATTR_PEER_NAME, name);
+		nla_put_string(msg, IPCON_ATTR_SRC_PEER, iph->name);
 		ipcon_data.d_size = size;
 		ipcon_data.d_data = buf;
 		nla_put_data(msg, IPCON_ATTR_DATA,
@@ -929,13 +932,13 @@ int ipcon_rcv_timeout(IPCON_HANDLER handler, struct ipcon_msg *im,
 		im->type = nla_get_u32(tb[IPCON_ATTR_MSG_TYPE]);
 		if (im->type == IPCON_MSG_UNICAST) {
 
-			if (!tb[IPCON_ATTR_PEER_NAME]) {
+			if (!tb[IPCON_ATTR_SRC_PEER]) {
 				ret = -EREMOTEIO;
 				break;
 			}
 
 			strcpy(im->group,
-				nla_get_string(tb[IPCON_ATTR_PEER_NAME]));
+				nla_get_string(tb[IPCON_ATTR_SRC_PEER]));
 
 		} else if (im->type == IPCON_MSG_MULTICAST) {
 

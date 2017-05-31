@@ -23,6 +23,7 @@ struct ipcon_group_info {
 
 struct ipcon_peer_handler {
 	struct link_entry_head grp; /* Must be first */
+	char *name;
 	struct ipcon_channel chan;
 	struct ipcon_channel ctrl_chan;
 };
