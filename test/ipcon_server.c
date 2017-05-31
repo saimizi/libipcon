@@ -8,6 +8,7 @@
 #include <pthread.h>
 #include <errno.h>
 #include <string.h>
+#include <assert.h>
 
 #include "libipcon.h"
 
@@ -34,6 +35,9 @@ static void ipcon_kevent(struct ipcon_msg *im)
 
 	switch (ik->type) {
 	case IPCON_EVENT_PEER_REMOVE:
+		if (!src_peer)
+			break;
+
 		if (!strcmp(ik->peer.name, src_peer)) {
 			ipcon_info("Detected %s@%lu removed.\n",
 				 ik->peer.name,
@@ -134,6 +138,7 @@ int main(int argc, char *argv[])
 		while (!should_quit) {
 			struct ipcon_msg im;
 
+			memset(&im, 0, sizeof(im));
 			ret = ipcon_rcv(handler, &im);
 			if (ret < 0) {
 				ipcon_err("Rcv mesg failed: %s(%d).\n",
@@ -142,6 +147,8 @@ int main(int argc, char *argv[])
 			}
 
 			if (im.type == IPCON_NORMAL_MSG)  {
+				assert(strcmp(im.peer, PEER_NAME));
+
 				if (!src_peer)
 					src_peer = strdup(im.peer);
 

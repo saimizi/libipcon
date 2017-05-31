@@ -154,6 +154,9 @@ int main(int argc, char *argv[])
 
 		}
 
+		ipcon_leave_group(handler, SRV_NAME, GRP_NAME);
+		ipcon_leave_group(handler, IPCON_GENL_NAME, IPCON_KERNEL_GROUP);
+
 		/* Free handler */
 		ipcon_free_handler(handler);
 
