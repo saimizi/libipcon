@@ -109,9 +109,17 @@ static int ipcon_rcv_msg(struct ipcon_channel *ic, struct nl_msg **nlh,
 
 		if (lnlh->nlmsg_type == NLMSG_ERROR) {
 			struct nlmsgerr *e = nlmsg_data(lnlh);
-			struct genlmsghdr *gnlh = nlmsg_data(&e->msg);
 
 			ret = e->error;
+#if DEBUG_ACK
+			{
+				struct genlmsghdr *gnlh = nlmsg_data(&e->msg);
+
+				ipcon_dbg("NLMSG_ERROR: ret = %d cmd=%d\n",
+					ret, gnlh->cmd);
+			}
+#endif
+
 			break;
 		}
 
@@ -453,10 +461,8 @@ int ipcon_find_peer(IPCON_HANDLER handler, char *name, __u32 *srv_port)
 		ipcon_ctrl_unlock(iph);
 		nlmsg_free(msg);
 
-		if (ret < 0) {
-			ipcon_err("IPCON_SRV_RESLOVE cmd failed.\n");
+		if (ret < 0)
 			break;
-		}
 
 		nlh = nlmsg_hdr(rmsg);
 		ret = genlmsg_parse(nlh,
@@ -651,7 +657,7 @@ int ipcon_unregister_group(IPCON_HANDLER handler, char *name)
  * Send message to a specific port.
  */
 
-int ipcon_send_unicast(IPCON_HANDLER handler, __u32 port,
+int ipcon_send_unicast(IPCON_HANDLER handler, char *name,
 				void *buf, size_t size)
 {
 
@@ -663,8 +669,7 @@ int ipcon_send_unicast(IPCON_HANDLER handler, __u32 port,
 	if (!iph || (size <= 0) || (size > IPCON_MAX_MSG_LEN))
 		return -EINVAL;
 
-	/* Appli is not permitted to send a msg to kernel */
-	if (!port)
+	if (!vaild_peer_name(name))
 		return -EINVAL;
 
 	do {
@@ -677,13 +682,15 @@ int ipcon_send_unicast(IPCON_HANDLER handler, __u32 port,
 		ipcon_put(msg, &iph->chan, 0, IPCON_USR_MSG);
 
 		nla_put_u32(msg, IPCON_ATTR_MSG_TYPE, IPCON_MSG_UNICAST);
-		nla_put_u32(msg, IPCON_ATTR_PORT, iph->chan.port);
+		nla_put_string(msg, IPCON_ATTR_PEER_NAME, name);
 		ipcon_data.d_size = size;
 		ipcon_data.d_data = buf;
 		nla_put_data(msg, IPCON_ATTR_DATA,
 			(struct nl_data *)&ipcon_data);
 
-		ret = ipcon_send_msg(&iph->chan, port, msg);
+		ipcon_ctrl_lock(iph);
+		ret = ipcon_send_rcv_msg(&iph->ctrl_chan, 0, msg, NULL);
+		ipcon_ctrl_unlock(iph);
 
 	} while (0);
 
@@ -922,12 +929,13 @@ int ipcon_rcv_timeout(IPCON_HANDLER handler, struct ipcon_msg *im,
 		im->type = nla_get_u32(tb[IPCON_ATTR_MSG_TYPE]);
 		if (im->type == IPCON_MSG_UNICAST) {
 
-			if (!tb[IPCON_ATTR_PORT]) {
+			if (!tb[IPCON_ATTR_PEER_NAME]) {
 				ret = -EREMOTEIO;
 				break;
 			}
 
-			im->port = nla_get_u32(tb[IPCON_ATTR_PORT]);
+			strcpy(im->group,
+				nla_get_string(tb[IPCON_ATTR_PEER_NAME]));
 
 		} else if (im->type == IPCON_MSG_MULTICAST) {
 
