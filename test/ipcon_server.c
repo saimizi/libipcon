@@ -20,7 +20,8 @@
 
 #define PEER_NAME	"ipcon_server"
 #define GRP_NAME	"str_msg"
-__u32 sender_port;
+
+char *src_peer;
 
 static void ipcon_kevent(struct ipcon_msg *im)
 {
@@ -33,10 +34,13 @@ static void ipcon_kevent(struct ipcon_msg *im)
 
 	switch (ik->type) {
 	case IPCON_EVENT_PEER_REMOVE:
-		if (ik->peer.port == sender_port) {
-			sender_port = 0;
-			ipcon_info("Detected sender@%lu removed.\n",
+		if (!strcmp(ik->peer.name, src_peer)) {
+			ipcon_info("Detected %s@%lu removed.\n",
+				 ik->peer.name,
 				 (unsigned long)ik->peer.port);
+
+			free(src_peer);
+			src_peer = NULL;
 		}
 		break;
 	default:
@@ -53,13 +57,13 @@ static int normal_msg_handler(IPCON_HANDLER handler, struct ipcon_msg *im)
 
 	if (!strcmp(im->buf, "bye")) {
 		ipcon_send_unicast(handler,
-				im->port,
+				im->peer,
 				"bye",
 				strlen("bye") + 1);
 
-		if (sender_port && (im->port != sender_port))
+		if (src_peer && strcmp(im->peer, src_peer))
 			ipcon_send_unicast(handler,
-				sender_port,
+				src_peer,
 				"bye",
 				strlen("bye") + 1);
 
@@ -71,15 +75,15 @@ static int normal_msg_handler(IPCON_HANDLER handler, struct ipcon_msg *im)
 		return ret;
 	}
 
-	if (!sender_port)
+	if (!src_peer)
 		return 0;
 
-	if (im->port == sender_port) {
-		ipcon_info("Msg from sender %lu: %s. size=%d.\n",
-				(unsigned long)im->port, im->buf, (int)im->len);
+	if (!strcmp(im->peer, src_peer)) {
+		ipcon_info("Msg from sender %s: %s. size=%d.\n",
+				im->peer, im->buf, (int)im->len);
 
 		ret = ipcon_send_unicast(handler,
-				im->port,
+				im->peer,
 				"OK",
 				strlen("OK") + 1);
 
@@ -138,8 +142,8 @@ int main(int argc, char *argv[])
 			}
 
 			if (im.type == IPCON_NORMAL_MSG)  {
-				if (!sender_port)
-					sender_port = im.port;
+				if (!src_peer)
+					src_peer = strdup(im.peer);
 
 				if (!strcmp(im.buf, "bye"))
 					should_quit = 1;

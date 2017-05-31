@@ -18,7 +18,6 @@
 #define ipcon_err(fmt, ...) \
 	fprintf(stderr, "[ipcon_cmd] Error: "fmt, ##__VA_ARGS__)
 
-__u32 srv_port;
 #define PEER_NAME	"ipcon_cmd"
 
 void ipcon_cmd_usage(void)
@@ -44,17 +43,8 @@ int main(int argc, char *argv[])
 	}
 
 	do {
-		ret = ipcon_find_peer(handler, argv[1], &srv_port);
-		if (ret < 0) {
-			ipcon_err("No service %s found.\n", argv[1]);
-			break;
-		}
-
-		ipcon_info("Detected service %s@%lu\n",
-				argv[1], (unsigned long)srv_port);
-
 		ret = ipcon_send_unicast(handler,
-					srv_port,
+					argv[1],
 					argv[2],
 					strlen(argv[2]) + 1);
 		if (ret < 0)

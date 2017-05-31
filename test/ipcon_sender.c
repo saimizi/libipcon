@@ -99,7 +99,7 @@ int main(int argc, char *argv[])
 				ipcon_info("Send %s to server %lu\n", argv[1],
 					(unsigned long)srv_port);
 				ret = ipcon_send_unicast(handler,
-						srv_port,
+						SRV_NAME,
 						argv[1],
 						strlen(argv[1]) + 1);
 				if (ret < 0)
@@ -117,7 +117,7 @@ int main(int argc, char *argv[])
 			}
 
 			if (im.type == IPCON_NORMAL_MSG) {
-				if (im.port == srv_port) {
+				if (!strcmp(im.peer, SRV_NAME)) {
 					ipcon_info("Server return: %s\n",
 						im.buf);
 					should_send_msg = 1;
