@@ -735,7 +735,7 @@ int ipcon_send_multicast(IPCON_HANDLER handler, char *name, void *buf,
 
 		ipcon_put(msg, &iph->ctrl_chan, 0, IPCON_MULTICAST_MSG);
 
-		nla_put_u32(msg, IPCON_ATTR_MSG_TYPE, IPCON_MSG_UNICAST);
+		nla_put_u32(msg, IPCON_ATTR_MSG_TYPE, IPCON_MSG_MULTICAST);
 		nla_put_string(msg, IPCON_ATTR_GRP_NAME, name);
 		ipcon_data.d_size = size;
 		ipcon_data.d_data = buf;
