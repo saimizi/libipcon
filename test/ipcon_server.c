@@ -39,10 +39,7 @@ static void ipcon_kevent(struct ipcon_msg *im)
 			break;
 
 		if (!strcmp(ik->peer.name, src_peer)) {
-			ipcon_info("Detected %s@%lu removed.\n",
-				 ik->peer.name,
-				 (unsigned long)ik->peer.port);
-
+			ipcon_info("Detected %s removed.\n", ik->peer.name);
 			free(src_peer);
 			src_peer = NULL;
 		}
@@ -114,7 +111,7 @@ int main(int argc, char *argv[])
 	}
 
 	do {
-		ret = ipcon_join_group(handler, IPCON_GENL_NAME,
+		ret = ipcon_join_group(handler, IPCON_NAME,
 				IPCON_KERNEL_GROUP, 0);
 		if (ret < 0) {
 			ipcon_err("Failed to join %s group :%s(%d).\n",

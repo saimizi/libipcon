@@ -39,8 +39,9 @@ static void ipcon_kevent(IPCON_HANDLER handler, struct ipcon_msg *im)
 	case IPCON_EVENT_GRP_ADD:
 		if (srv_group_connected)
 			break;
-		if (!strcmp(ik->grp.group_name, GRP_NAME) &&
-			!strcmp(ik->grp.peer_name, SRV_NAME)) {
+
+		if (!strcmp(ik->group.name, GRP_NAME) &&
+			!strcmp(ik->group.peer_name, SRV_NAME)) {
 			ret = ipcon_join_group(handler, SRV_NAME, GRP_NAME, 1);
 			if (ret < 0) {
 				ipcon_err("Failed to join group %s: %s(%d)\n",
@@ -59,8 +60,8 @@ static void ipcon_kevent(IPCON_HANDLER handler, struct ipcon_msg *im)
 		if (!srv_group_connected)
 			break;
 
-		if (!strcmp(ik->grp.group_name, GRP_NAME) &&
-			!strcmp(ik->grp.peer_name, SRV_NAME)) {
+		if (!strcmp(ik->group.name, GRP_NAME) &&
+			!strcmp(ik->group.peer_name, SRV_NAME)) {
 
 			ret = ipcon_leave_group(handler, SRV_NAME, GRP_NAME);
 			if (ret < 0) {
@@ -78,8 +79,7 @@ static void ipcon_kevent(IPCON_HANDLER handler, struct ipcon_msg *im)
 		break;
 
 	case IPCON_EVENT_PEER_REMOVE:
-		ipcon_err("peer %s@%lu is remove\n",
-				ik->peer.name, (unsigned long)ik->peer.port);
+		ipcon_err("peer %s is remove\n", ik->peer.name);
 		break;
 	default:
 		break;
@@ -102,7 +102,7 @@ int main(int argc, char *argv[])
 			break;
 		}
 
-		ret = ipcon_join_group(handler, IPCON_GENL_NAME,
+		ret = ipcon_join_group(handler, IPCON_NAME,
 				IPCON_KERNEL_GROUP, 0);
 		if (ret < 0) {
 			ipcon_err("Failed to get %s group :%s(%d).\n",
@@ -155,7 +155,7 @@ int main(int argc, char *argv[])
 		}
 
 		ipcon_leave_group(handler, SRV_NAME, GRP_NAME);
-		ipcon_leave_group(handler, IPCON_GENL_NAME, IPCON_KERNEL_GROUP);
+		ipcon_leave_group(handler, IPCON_NAME, IPCON_KERNEL_GROUP);
 
 		/* Free handler */
 		ipcon_free_handler(handler);

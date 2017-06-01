@@ -20,7 +20,6 @@
 
 #define SRV_NAME	"ipcon_server"
 #define PEER_NAME	"ipcon_sender"
-__u32 srv_port;
 int should_send_msg;
 
 static void ipcon_kevent(struct ipcon_msg *im)
@@ -34,19 +33,15 @@ static void ipcon_kevent(struct ipcon_msg *im)
 
 	switch (ik->type) {
 	case IPCON_EVENT_PEER_ADD:
-		if (!strcmp(ik->peer.name, SRV_NAME) && !srv_port) {
-			srv_port = ik->peer.port;
+		if (!strcmp(ik->peer.name, SRV_NAME)) {
 			should_send_msg = 1;
-			ipcon_info("Detected service %s@%lu.\n",
-				SRV_NAME, (unsigned long)srv_port);
+			ipcon_info("Detected service %s.\n", SRV_NAME);
 		}
 		break;
 	case IPCON_EVENT_PEER_REMOVE:
-		if (!strcmp(ik->peer.name, SRV_NAME) && srv_port) {
-			ipcon_info("Detected service %s@%lu removed.\n",
-				SRV_NAME, (unsigned long)srv_port);
-			srv_port = 0;
+		if (!strcmp(ik->peer.name, SRV_NAME)) {
 			should_send_msg = 0;
+			ipcon_info("Detected service %s removed.\n", SRV_NAME);
 		}
 		break;
 	default:
@@ -74,7 +69,7 @@ int main(int argc, char *argv[])
 
 	do {
 
-		ret = ipcon_join_group(handler, IPCON_GENL_NAME,
+		ret = ipcon_join_group(handler, IPCON_NAME,
 				IPCON_KERNEL_GROUP, 0);
 		if (ret < 0)
 			ipcon_err("Failed to get %s group :%s(%d).\n",
@@ -94,8 +89,9 @@ int main(int argc, char *argv[])
 			struct ipcon_msg im;
 
 			if (should_send_msg) {
-				ipcon_info("Send %s to server %lu\n", argv[1],
-					(unsigned long)srv_port);
+				ipcon_info("Send %s to server %s\n",
+						argv[1], SRV_NAME);
+
 				ret = ipcon_send_unicast(handler,
 						SRV_NAME,
 						argv[1],
