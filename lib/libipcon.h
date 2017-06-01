@@ -23,7 +23,7 @@ struct ipcon_msg {
 	__u32 len;
 };
 
-static inline int vaild_peer_name(char *name)
+static inline int valid_peer_name(char *name)
 {
 	size_t len;
 
@@ -40,7 +40,7 @@ static inline int vaild_peer_name(char *name)
 
 IPCON_HANDLER ipcon_create_handler(char *name);
 void ipcon_free_handler(IPCON_HANDLER handler);
-int ipcon_find_peer(IPCON_HANDLER handler, char *name, __u32 *srv_port);
+int is_peer_present(IPCON_HANDLER handler, char *name);
 int ipcon_rcv(IPCON_HANDLER handler, struct ipcon_msg *im);
 int ipcon_send_unicast(IPCON_HANDLER handler, char *name,
 				void *buf, size_t size);

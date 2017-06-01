@@ -289,7 +289,7 @@ IPCON_HANDLER ipcon_create_handler(char *peer_name)
 		else
 			name = strdup(peer_name);
 
-		if (!vaild_peer_name(name))
+		if (!valid_peer_name(name))
 			break;
 
 		ipcon_dbg("Peer name: %s\n", name);
@@ -419,15 +419,7 @@ int ipcon_register_group(IPCON_HANDLER handler, char *name)
 	return ret;
 }
 
-/*
- * ipcon_find_service
- *
- * Reslove the information of a service point by name.
- * If another message is received when waiting for resloving message from
- * kernel, queue it into the message queue.
- *
- */
-int ipcon_find_peer(IPCON_HANDLER handler, char *name, __u32 *srv_port)
+int is_peer_present(IPCON_HANDLER handler, char *name)
 {
 	struct ipcon_peer_handler *iph = handler_to_iph(handler);
 	void *hdr = NULL;
@@ -438,11 +430,10 @@ int ipcon_find_peer(IPCON_HANDLER handler, char *name, __u32 *srv_port)
 	struct nl_msg *rmsg = NULL;
 	struct nlattr *tb[NUM_IPCON_ATTR];
 
-	if (!iph || !name)
+	if (!iph)
 		return -EINVAL;
 
-	srv_name_len = (int)strlen(name);
-	if (!srv_name_len || srv_name_len > IPCON_MAX_NAME_LEN)
+	if (!valid_peer_name(name))
 		return -EINVAL;
 
 
@@ -454,9 +445,9 @@ int ipcon_find_peer(IPCON_HANDLER handler, char *name, __u32 *srv_port)
 			break;
 		}
 
-		ipcon_put(msg, &iph->ctrl_chan, 0, IPCON_SRV_RESLOVE);
+		ipcon_put(msg, &iph->ctrl_chan, 0, IPCON_PEER_RESLOVE);
 		nla_put_u32(msg, IPCON_ATTR_MSG_TYPE, IPCON_MSG_UNICAST);
-		nla_put_string(msg, IPCON_ATTR_SRV_NAME, name);
+		nla_put_string(msg, IPCON_ATTR_PEER_NAME, name);
 
 		ipcon_ctrl_lock(iph);
 		ret = ipcon_send_rcv_msg(&iph->ctrl_chan, 0, msg, &rmsg);
@@ -479,10 +470,10 @@ int ipcon_find_peer(IPCON_HANDLER handler, char *name, __u32 *srv_port)
 			break;
 		}
 
-		if (tb[IPCON_ATTR_PORT])
-			*srv_port = nla_get_u32(tb[IPCON_ATTR_PORT]);
+		if (tb[IPCON_ATTR_FLAG])
+			ret = 1;
 		else
-			ret = -ENOENT;
+			ret = 0;
 
 		nlmsg_free(rmsg);
 
@@ -671,7 +662,7 @@ int ipcon_send_unicast(IPCON_HANDLER handler, char *name,
 	if (!iph || (size <= 0) || (size > IPCON_MAX_MSG_LEN))
 		return -EINVAL;
 
-	if (!vaild_peer_name(name))
+	if (!valid_peer_name(name))
 		return -EINVAL;
 
 	do {
