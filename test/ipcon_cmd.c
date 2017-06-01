@@ -42,6 +42,11 @@ int main(int argc, char *argv[])
 		return 1;
 	}
 
+	if (!is_peer_present(handler, argv[1])) {
+		ipcon_err("%s not found.\n", argv[1]);
+		return 1;
+	}
+
 	do {
 		ret = ipcon_send_unicast(handler,
 					argv[1],

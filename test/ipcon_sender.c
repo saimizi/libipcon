@@ -84,10 +84,8 @@ int main(int argc, char *argv[])
 		else
 			ipcon_info("Joined %s group.\n", IPCON_KERNEL_GROUP);
 
-		ret = ipcon_find_peer(handler, SRV_NAME, &srv_port);
-		if (!ret) {
-			ipcon_info("Detected service %s@%lu\n",
-					SRV_NAME, (unsigned long)srv_port);
+		if (is_peer_present(handler, SRV_NAME)) {
+			ipcon_info("Detected service %s.\n", SRV_NAME);
 			should_send_msg = 1;
 		}
 
