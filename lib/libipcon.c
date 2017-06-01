@@ -502,7 +502,6 @@ static int ipcon_get_group(struct ipcon_peer_handler *iph, char *srvname,
 
 		ipcon_put(msg, &iph->ctrl_chan, 0, IPCON_GRP_RESLOVE);
 		nla_put_u32(msg, IPCON_ATTR_MSG_TYPE, IPCON_MSG_UNICAST);
-		nla_put_u32(msg, IPCON_ATTR_PORT, iph->chan.port);
 		nla_put_string(msg, IPCON_ATTR_SRV_NAME, srvname);
 		nla_put_string(msg, IPCON_ATTR_GRP_NAME, grpname);
 		if (rcv_last_msg)
