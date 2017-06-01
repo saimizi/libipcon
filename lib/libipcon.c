@@ -309,7 +309,7 @@ IPCON_HANDLER ipcon_create_handler(char *peer_name)
 		ipcon_dbg("Ctrl port: %lu.\n",
 				(unsigned long)iph->ctrl_chan.port);
 
-		family = genl_ctrl_resolve(iph->ctrl_chan.sk, IPCON_GENL_NAME);
+		family = genl_ctrl_resolve(iph->ctrl_chan.sk, IPCON_NAME);
 		if (family < 0)
 			break;
 
