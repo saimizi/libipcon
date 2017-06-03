@@ -57,23 +57,18 @@ static int normal_msg_handler(IPCON_HANDLER handler, struct ipcon_msg *im)
 		return -EINVAL;
 
 	if (!strcmp(im->buf, "bye")) {
-		ipcon_send_unicast(handler,
-				im->peer,
-				"bye",
+		ipcon_send_unicast(handler, im->peer, "bye",
 				strlen("bye") + 1);
 
 		if (src_peer && strcmp(im->peer, src_peer))
-			ipcon_send_unicast(handler,
-				src_peer,
-				"bye",
+			ipcon_send_unicast(handler, src_peer, "bye",
 				strlen("bye") + 1);
 
-		ipcon_send_multicast(handler, GRP_NAME,
-				"bye",
+		ipcon_send_multicast(handler, GRP_NAME, "bye",
 				strlen("bye") + 1);
 
 
-		return ret;
+		return 1;
 	}
 
 	if (!src_peer)
@@ -149,10 +144,15 @@ int main(int argc, char *argv[])
 				if (!src_peer)
 					src_peer = strdup(im.peer);
 
-				if (!strcmp(im.buf, "bye"))
+				if (!src_peer) {
+					ipcon_err("No memory.\n");
 					should_quit = 1;
+					continue;
+				}
 
-				normal_msg_handler(handler, &im);
+				ret = normal_msg_handler(handler, &im);
+				if (ret == 1)
+					should_quit = 1;
 
 			} else if (im.type == IPCON_GROUP_MSG) {
 				if (!strcmp(im.group, IPCON_KERNEL_GROUP))

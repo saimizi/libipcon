@@ -8,6 +8,7 @@
 #include <pthread.h>
 #include <errno.h>
 #include <string.h>
+#include <assert.h>
 
 #include "libipcon.h"
 
@@ -19,8 +20,9 @@
 	fprintf(stderr, "[ipcon_server_poll] Error: "fmt, ##__VA_ARGS__)
 
 #define PEER_NAME	"ipcon_server_poll"
-#define GRP_NAME	"str_msg"
-__u32 sender_port;
+#define GRP_NAME	"str_msg_poll"
+
+char *src_peer;
 
 static void ipcon_kevent(struct ipcon_msg *im)
 {
@@ -33,10 +35,13 @@ static void ipcon_kevent(struct ipcon_msg *im)
 
 	switch (ik->type) {
 	case IPCON_EVENT_PEER_REMOVE:
-		if (ik->peer.port == sender_port) {
-			sender_port = 0;
-			ipcon_info("Detected sender@%lu removed.\n",
-				 (unsigned long)ik->peer.port);
+		if (!src_peer)
+			break;
+
+		if (!strcmp(ik->peer.name, src_peer)) {
+			ipcon_info("Detected %s removed.\n", ik->peer.name);
+			free(src_peer);
+			src_peer = NULL;
 		}
 		break;
 	default:
@@ -52,34 +57,29 @@ static int normal_msg_handler(IPCON_HANDLER handler, struct ipcon_msg *im)
 		return -EINVAL;
 
 	if (!strcmp(im->buf, "bye")) {
-		ipcon_send_unicast(handler,
-				im->port,
-				"bye",
+		ipcon_send_unicast(handler, im->peer, "bye",
 				strlen("bye") + 1);
 
-		if (sender_port && (im->port != sender_port))
-			ipcon_send_unicast(handler,
-				sender_port,
-				"bye",
+		if (src_peer && strcmp(im->peer, src_peer))
+			ipcon_send_unicast(handler, src_peer, "bye",
 				strlen("bye") + 1);
 
-		ipcon_send_multicast(handler, GRP_NAME,
-				"bye",
+		ipcon_send_multicast(handler, GRP_NAME, "bye",
 				strlen("bye") + 1);
 
 
-		return ret;
+		return 1;
 	}
 
-	if (!sender_port)
+	if (!src_peer)
 		return 0;
 
-	if (im->port == sender_port) {
-		ipcon_info("Msg from sender %lu: %s. size=%d.\n",
-				(unsigned long)im->port, im->buf, (int)im->len);
+	if (!strcmp(im->peer, src_peer)) {
+		ipcon_info("Msg from sender %s: %s. size=%d.\n",
+				im->peer, im->buf, (int)im->len);
 
 		ret = ipcon_send_unicast(handler,
-				im->port,
+				im->peer,
 				"OK",
 				strlen("OK") + 1);
 
@@ -106,7 +106,7 @@ int main(int argc, char *argv[])
 	}
 
 	do {
-		ret = ipcon_join_group(handler, IPCON_GENL_NAME,
+		ret = ipcon_join_group(handler, IPCON_NAME,
 				IPCON_KERNEL_GROUP, 0);
 		if (ret < 0) {
 			ipcon_err("Failed to join %s group :%s(%d).\n",
@@ -118,7 +118,6 @@ int main(int argc, char *argv[])
 		}
 
 		ipcon_info("Joined %s group.\n", IPCON_KERNEL_GROUP);
-
 		ret = ipcon_register_group(handler, GRP_NAME);
 		if (ret < 0) {
 			ipcon_err("Failed to register group: %s (%d)\n",
@@ -132,7 +131,7 @@ int main(int argc, char *argv[])
 			struct ipcon_msg im;
 			struct timeval timeout;
 
-			timeout.tv_sec = 10;
+			timeout.tv_sec = 60;
 			timeout.tv_usec = 0;
 #if 0
 			int fd = ipcon_getfd(handler);
@@ -174,13 +173,20 @@ int main(int argc, char *argv[])
 #endif
 
 			if (im.type == IPCON_NORMAL_MSG)  {
-				if (!sender_port)
-					sender_port = im.port;
+				assert(strcmp(im.peer, PEER_NAME));
 
-				if (!strcmp(im.buf, "bye"))
+				if (!src_peer)
+					src_peer = strdup(im.peer);
+
+				if (!src_peer) {
+					ipcon_err("No memory.\n");
+					should_quit = 1;
+				}
+
+				ret = normal_msg_handler(handler, &im);
+				if (ret == 1)
 					should_quit = 1;
 
-				normal_msg_handler(handler, &im);
 
 			} else if (im.type == IPCON_GROUP_MSG) {
 				if (!strcmp(im.group, IPCON_KERNEL_GROUP))
