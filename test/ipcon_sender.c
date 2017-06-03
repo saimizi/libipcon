@@ -15,6 +15,8 @@
 	fprintf(stderr, "[ipcon_sender] Debug: "fmt, ##__VA_ARGS__)
 #define ipcon_info(fmt, ...) \
 	fprintf(stderr, "[ipcon_sender] Info: "fmt, ##__VA_ARGS__)
+#define ipcon_warn(fmt, ...) \
+	fprintf(stderr, "[ipcon_sender] Warn: "fmt, ##__VA_ARGS__)
 #define ipcon_err(fmt, ...) \
 	fprintf(stderr, "[ipcon_sender] Error: "fmt, ##__VA_ARGS__)
 
@@ -35,7 +37,7 @@ static void ipcon_kevent(struct ipcon_msg *im)
 	case IPCON_EVENT_PEER_ADD:
 		if (!strcmp(ik->peer.name, SRV_NAME)) {
 			should_send_msg = 1;
-			ipcon_info("Detected service %s.\n", SRV_NAME);
+			ipcon_info("Detected peer %s created.\n", SRV_NAME);
 		}
 		break;
 	case IPCON_EVENT_PEER_REMOVE:
@@ -44,9 +46,34 @@ static void ipcon_kevent(struct ipcon_msg *im)
 			ipcon_info("Detected service %s removed.\n", SRV_NAME);
 		}
 		break;
+	case IPCON_EVENT_GRP_ADD:
+		ipcon_info("Detected group %s.%s added.\n",
+				ik->group.peer_name,
+				ik->group.name);
+		break;
+	case IPCON_EVENT_GRP_REMOVE:
+		ipcon_info("Detected group %s.%s removed.\n",
+				ik->group.peer_name,
+				ik->group.name);
+		break;
 	default:
+
 		break;
 	}
+}
+
+static int normal_msg_handler(struct ipcon_msg *im)
+{
+	if (strcmp(im->peer, SRV_NAME)) {
+		ipcon_warn("Ignore msg from %s\n", im->peer);
+		return -1;
+	}
+
+	ipcon_info("Server say %s.\n", im->buf);
+	if (!strcmp(im->buf, "bye"))
+		return 1;
+
+	return 0;
 }
 
 int main(int argc, char *argv[])
@@ -85,8 +112,8 @@ int main(int argc, char *argv[])
 		}
 
 		while (!should_quit) {
-			int len = 0;
 			struct ipcon_msg im;
+			int skip_sleep = 0;
 
 			if (should_send_msg) {
 				ipcon_info("Send %s to server %s\n",
@@ -96,40 +123,68 @@ int main(int argc, char *argv[])
 						SRV_NAME,
 						argv[1],
 						strlen(argv[1]) + 1);
-				if (ret < 0)
-					ipcon_err("Send msg error: %s(%d)\n.",
+
+				if (ret < 0 && ret != -ENOENT) {
+					/*
+					 * if fail on the reason other than the
+					 * exit of server, just exit ...
+					 */
+					ipcon_err("Send msg error: %s(%d), quit\n.",
 						strerror(-ret), -ret);
-				else
-					should_send_msg = 0;
-			}
 
-			len = ipcon_rcv(handler, &im);
-			if (len < 0) {
-				ipcon_err("Rcv mesg failed: %s(%d).\n",
-					strerror(-len), -len);
-				continue;
-			}
-
-			if (im.type == IPCON_NORMAL_MSG) {
-				if (!strcmp(im.peer, SRV_NAME)) {
-					ipcon_info("Server return: %s\n",
-						im.buf);
-					should_send_msg = 1;
-				}
-
-				if (!strcmp(im.buf, "bye")) {
 					should_quit = 1;
-					continue;
 				}
 
-			} else if (im.type == IPCON_GROUP_MSG) {
-				if (!strcmp(im.group, IPCON_KERNEL_GROUP))
-					ipcon_kevent(&im);
-
-				continue;
+				should_send_msg = 0;
 			}
 
-			sleep(1);
+			do {
+				ret = ipcon_rcv(handler, &im);
+				if (ret < 0) {
+					ipcon_err("Rcv mesg failed: %s(%d).\n",
+						strerror(-ret), -ret);
+
+					should_quit = 1;
+					skip_sleep = 1;
+					break;
+				}
+
+				if (im.type == IPCON_NORMAL_MSG) {
+
+					ret = normal_msg_handler(&im);
+
+					/* unexpected message */
+					if (ret == -1)
+						continue;
+
+					/* server asked quit */
+					if (ret == 1) {
+						should_quit = 1;
+						skip_sleep = 1;
+					}
+
+					should_send_msg = 1;
+					break;
+
+
+				} else if (im.type == IPCON_GROUP_MSG) {
+					if (!strcmp(im.group,
+						IPCON_KERNEL_GROUP))
+						ipcon_kevent(&im);
+
+					/*
+					 * if server peer detected, should send
+					 * msg...
+					 */
+					if (should_send_msg) {
+						skip_sleep = 1;
+						break;
+					}
+				}
+			} while (1);
+
+			if (!skip_sleep)
+				sleep(1);
 		}
 
 	} while (0);
