@@ -124,7 +124,7 @@ int main(int argc, char *argv[])
 						argv[1],
 						strlen(argv[1]) + 1);
 
-				if (ret < 0 && ret != -ENOENT) {
+				if (ret < 0 && ret != -ESRCH) {
 					/*
 					 * if fail on the reason other than the
 					 * exit of server, just exit ...
@@ -133,6 +133,7 @@ int main(int argc, char *argv[])
 						strerror(-ret), -ret);
 
 					should_quit = 1;
+					continue;
 				}
 
 				should_send_msg = 0;
