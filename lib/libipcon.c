@@ -270,7 +270,7 @@ static char *auto_peer_name()
  * Create and return a ipcon handler with an internal structure ipcon_mng_info.
  */
 
-IPCON_HANDLER ipcon_create_handler(char *peer_name)
+IPCON_HANDLER ipcon_create_handler(char *peer_name, enum peer_type type)
 {
 	struct ipcon_peer_handler *iph = NULL;
 	int gi = 0;
@@ -336,6 +336,7 @@ IPCON_HANDLER ipcon_create_handler(char *peer_name)
 		ipcon_put(msg, &iph->ctrl_chan, 0, IPCON_PEER_REG);
 		nla_put_u32(msg, IPCON_ATTR_MSG_TYPE, IPCON_MSG_UNICAST);
 		nla_put_u32(msg, IPCON_ATTR_PORT, iph->chan.port);
+		nla_put_u32(msg, IPCON_ATTR_PEER_TYPE, type);
 		nla_put_string(msg, IPCON_ATTR_PEER_NAME, name);
 
 		ipcon_ctrl_lock(iph);
