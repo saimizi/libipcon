@@ -96,7 +96,7 @@ int main(int argc, char *argv[])
 
 	do {
 		/* Create server handler */
-		handler = ipcon_create_handler(NULL);
+		handler = ipcon_create_handler(NULL, ANON);
 		if (!handler) {
 			ipcon_err("Failed to create libipcon handler.\n");
 			break;
