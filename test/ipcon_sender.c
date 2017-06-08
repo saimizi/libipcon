@@ -10,6 +10,7 @@
 #include <string.h>
 
 #include "libipcon.h"
+#include "ipcon_logger.h"
 
 #define ipcon_dbg(fmt, ...) \
 	fprintf(stderr, "[ipcon_sender] Debug: "fmt, ##__VA_ARGS__)
@@ -83,6 +84,7 @@ int main(int argc, char *argv[])
 	IPCON_HANDLER	handler;
 	int should_quit = 0;
 
+
 	if (!argv[1]) {
 		ipcon_err("No message specified.\n");
 		return 1;
@@ -119,18 +121,34 @@ int main(int argc, char *argv[])
 				ipcon_info("Send %s to server %s\n",
 						argv[1], SRV_NAME);
 
+redo:
 				ret = ipcon_send_unicast(handler,
 						SRV_NAME,
 						argv[1],
 						strlen(argv[1]) + 1);
 
+				if (ret == -EAGAIN) {
+					usleep(100000);
+					goto redo;
+				}
+
 				if (ret < 0 && ret != -ESRCH) {
+					struct logger_msg lm;
+
 					/*
 					 * if fail on the reason other than the
 					 * exit of server, just exit ...
 					 */
 					ipcon_err("Send msg error: %s(%d), quit\n.",
 						strerror(-ret), -ret);
+
+
+					sprintf(lm.msg,
+						"send msg error: %s(%d),quit\n",
+						strerror(-ret), -ret);
+					ipcon_send_unicast(handler,
+							LOGGER_PEER_NAME,
+							&lm, sizeof(lm));
 
 					should_quit = 1;
 					continue;
@@ -142,8 +160,18 @@ int main(int argc, char *argv[])
 			do {
 				ret = ipcon_rcv(handler, &im);
 				if (ret < 0) {
+					struct logger_msg lm;
+
 					ipcon_err("Rcv mesg failed: %s(%d).\n",
 						strerror(-ret), -ret);
+
+
+					sprintf(lm.msg,
+						"receive msg error: %s(%d),quit\n",
+						strerror(-ret), -ret);
+					ipcon_send_unicast(handler,
+							LOGGER_PEER_NAME,
+							&lm, sizeof(lm));
 
 					should_quit = 1;
 					skip_sleep = 1;
