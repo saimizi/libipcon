@@ -22,6 +22,9 @@
 #define PEER_NAME	"ipcon_server"
 #define GRP_NAME	"str_msg"
 
+#define SYNC_GRP_MSG	1
+#define ASYNC_GRP_MSG	0
+
 static int normal_msg_handler(IPCON_HANDLER handler, struct ipcon_msg *im)
 {
 	int ret = 0;
@@ -34,7 +37,7 @@ static int normal_msg_handler(IPCON_HANDLER handler, struct ipcon_msg *im)
 				strlen("bye") + 1);
 
 		ipcon_send_multicast(handler, GRP_NAME, "bye",
-				strlen("bye") + 1);
+				strlen("bye") + 1, SYNC_GRP_MSG);
 
 		return 1;
 	}
@@ -47,7 +50,8 @@ static int normal_msg_handler(IPCON_HANDLER handler, struct ipcon_msg *im)
 			"OK",
 			strlen("OK") + 1);
 
-	ret = ipcon_send_multicast(handler, GRP_NAME, im->buf, im->len);
+	ret = ipcon_send_multicast(handler, GRP_NAME, im->buf,
+				im->len, ASYNC_GRP_MSG);
 	if (ret < 0)
 		ipcon_err("Failed to send mutlcast message:%s(%d).",
 			strerror(-ret), -ret);
@@ -123,7 +127,8 @@ int main(int argc, char *argv[])
 					ipcon_info("%s timeout.\n", PEER_NAME);
 					ipcon_send_multicast(handler, GRP_NAME,
 							"bye",
-							strlen("bye") + 1);
+							strlen("bye") + 1,
+							SYNC_GRP_MSG);
 					should_quit = 1;
 				} else {
 					ipcon_info("%s : %s (%d).\n", PEER_NAME,
