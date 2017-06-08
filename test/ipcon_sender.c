@@ -88,7 +88,7 @@ int main(int argc, char *argv[])
 		return 1;
 	}
 
-	handler = ipcon_create_handler(PEER_NAME, ANON);
+	handler = ipcon_create_handler(NULL, ANON);
 	if (!handler) {
 		ipcon_err("Failed to create handler\n");
 		return 1;

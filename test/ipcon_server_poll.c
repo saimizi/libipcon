@@ -19,35 +19,8 @@
 #define ipcon_err(fmt, ...) \
 	fprintf(stderr, "[ipcon_server_poll] Error: "fmt, ##__VA_ARGS__)
 
-#define PEER_NAME	"ipcon_server_poll"
-#define GRP_NAME	"str_msg_poll"
-
-char *src_peer;
-
-static void ipcon_kevent(struct ipcon_msg *im)
-{
-	struct ipcon_kevent *ik;
-
-	if (!im)
-		return;
-
-	ik = (struct ipcon_kevent *)im->buf;
-
-	switch (ik->type) {
-	case IPCON_EVENT_PEER_REMOVE:
-		if (!src_peer)
-			break;
-
-		if (!strcmp(ik->peer.name, src_peer)) {
-			ipcon_info("Detected %s removed.\n", ik->peer.name);
-			free(src_peer);
-			src_peer = NULL;
-		}
-		break;
-	default:
-		break;
-	}
-}
+#define PEER_NAME	"ipcon_server"
+#define GRP_NAME	"str_msg"
 
 static int normal_msg_handler(IPCON_HANDLER handler, struct ipcon_msg *im)
 {
@@ -60,34 +33,24 @@ static int normal_msg_handler(IPCON_HANDLER handler, struct ipcon_msg *im)
 		ipcon_send_unicast(handler, im->peer, "bye",
 				strlen("bye") + 1);
 
-		if (src_peer && strcmp(im->peer, src_peer))
-			ipcon_send_unicast(handler, src_peer, "bye",
-				strlen("bye") + 1);
-
 		ipcon_send_multicast(handler, GRP_NAME, "bye",
 				strlen("bye") + 1);
-
 
 		return 1;
 	}
 
-	if (!src_peer)
-		return 0;
+	ipcon_info("Msg from sender %s: %s. size=%d.\n",
+			im->peer, im->buf, (int)im->len);
 
-	if (!strcmp(im->peer, src_peer)) {
-		ipcon_info("Msg from sender %s: %s. size=%d.\n",
-				im->peer, im->buf, (int)im->len);
+	ret = ipcon_send_unicast(handler,
+			im->peer,
+			"OK",
+			strlen("OK") + 1);
 
-		ret = ipcon_send_unicast(handler,
-				im->peer,
-				"OK",
-				strlen("OK") + 1);
-
-		ret = ipcon_send_multicast(handler, GRP_NAME, im->buf, im->len);
-		if (ret < 0)
-			ipcon_err("Failed to send mutlcast message:%s(%d).",
-				strerror(-ret), -ret);
-	}
+	ret = ipcon_send_multicast(handler, GRP_NAME, im->buf, im->len);
+	if (ret < 0)
+		ipcon_err("Failed to send mutlcast message:%s(%d).",
+			strerror(-ret), -ret);
 
 	return ret;
 }
@@ -175,22 +138,9 @@ int main(int argc, char *argv[])
 			if (im.type == IPCON_NORMAL_MSG)  {
 				assert(strcmp(im.peer, PEER_NAME));
 
-				if (!src_peer)
-					src_peer = strdup(im.peer);
-
-				if (!src_peer) {
-					ipcon_err("No memory.\n");
-					should_quit = 1;
-				}
-
 				ret = normal_msg_handler(handler, &im);
 				if (ret == 1)
 					should_quit = 1;
-
-
-			} else if (im.type == IPCON_GROUP_MSG) {
-				if (!strcmp(im.group, IPCON_KERNEL_GROUP))
-					ipcon_kevent(&im);
 
 			} else {
 				ipcon_err("Invalid message type (%lu).\n",
