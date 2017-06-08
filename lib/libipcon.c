@@ -249,13 +249,16 @@ static char *auto_peer_name()
 {
 	int rnum = 0;
 	char *name = malloc(IPCON_MAX_NAME_LEN);
+	struct timeval tv;
+
+	gettimeofday(&tv, NULL);
 
 #if IPCON_MAX_NAME_LEN >= 13
 
 	if (!name)
 		return NULL;
 
-	srand((unsigned int)time(NULL));
+	srand((unsigned int)tv.tv_usec);
 	rnum = rand() % (9999999 - 1 + 1) + 1;
 	sprintf(name, "Anon-%lu", (unsigned long)rnum);
 #else
