@@ -53,7 +53,7 @@ __u32 ipcon_get_selfport(IPCON_HANDLER handler);
 int ipcon_getfd(IPCON_HANDLER handler);
 int ipcon_find_group(IPCON_HANDLER handler, char *name, __u32 *groupid);
 int ipcon_send_multicast(IPCON_HANDLER handler, char *name, void *buf,
-			size_t size);
+			size_t size, int sync);
 int ipcon_rcv_timeout(IPCON_HANDLER handler, struct ipcon_msg *im,
 		struct timeval *timeout);
 

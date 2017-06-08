@@ -705,7 +705,7 @@ int ipcon_send_unicast(IPCON_HANDLER handler, char *name,
  */
 
 int ipcon_send_multicast(IPCON_HANDLER handler, char *name, void *buf,
-			size_t size)
+			size_t size, int sync)
 {
 	struct ipcon_peer_handler *iph = handler_to_iph(handler);
 	int ret = 0;
@@ -731,6 +731,8 @@ int ipcon_send_multicast(IPCON_HANDLER handler, char *name, void *buf,
 
 		nla_put_u32(msg, IPCON_ATTR_MSG_TYPE, IPCON_MSG_MULTICAST);
 		nla_put_string(msg, IPCON_ATTR_GRP_NAME, name);
+		if (sync)
+			nla_put_flag(msg, IPCON_ATTR_FLAG);
 		ipcon_data.d_size = size;
 		ipcon_data.d_data = buf;
 		nla_put_data(msg, IPCON_ATTR_DATA,
