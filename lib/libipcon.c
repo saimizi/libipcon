@@ -52,14 +52,6 @@ static inline int libnl_error(int error)
 	}
 }
 
-struct ipcon_rcv_msg_info {
-	struct ipcon_channel *ic;
-	__u32 target_port;
-	int target_cmd;
-	struct nl_msg *msg;
-};
-
-
 static struct nla_policy ipcon_policy[NUM_IPCON_ATTR] = {
 	[IPCON_ATTR_MSG_TYPE] = {.type = NLA_U32},
 	[IPCON_ATTR_PORT] = {.type = NLA_U32},
