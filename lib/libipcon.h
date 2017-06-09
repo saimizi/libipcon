@@ -58,4 +58,5 @@ int ipcon_rcv_timeout(IPCON_HANDLER handler, struct ipcon_msg *im,
 		struct timeval *timeout);
 
 int ipcon_rcv_nonblock(IPCON_HANDLER handler, struct ipcon_msg *im);
+const char *ipcon_selfname(IPCON_HANDLER handler);
 #endif

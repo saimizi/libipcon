@@ -983,3 +983,10 @@ int ipcon_rcv_nonblock(IPCON_HANDLER handler, struct ipcon_msg *im)
 
 	return ipcon_rcv_timeout(handler, im, &timeout);
 }
+
+const char *ipcon_selfname(IPCON_HANDLER handler)
+{
+	struct ipcon_peer_handler *iph = handler_to_iph(handler);
+
+	return (const char *)iph->name;
+}
