@@ -479,7 +479,7 @@ int is_peer_present(IPCON_HANDLER handler, char *name)
 }
 
 static int ipcon_get_group(struct ipcon_peer_handler *iph, char *srvname,
-		char *grpname, __u32 *groupid, int rcv_last_msg)
+		char *grpname, __u32 *groupid)
 {
 	void *hdr = NULL;
 	int ret = 0;
@@ -500,8 +500,6 @@ static int ipcon_get_group(struct ipcon_peer_handler *iph, char *srvname,
 		nla_put_u32(msg, IPCON_ATTR_MSG_TYPE, IPCON_MSG_UNICAST);
 		nla_put_string(msg, IPCON_ATTR_SRV_NAME, srvname);
 		nla_put_string(msg, IPCON_ATTR_GRP_NAME, grpname);
-		if (rcv_last_msg)
-			nla_put_flag(msg, IPCON_ATTR_FLAG);
 
 		ret = ipcon_send_rcv_msg(&iph->ctrl_chan, 0, msg, &rmsg);
 		nlmsg_free(msg);
@@ -538,13 +536,8 @@ static int ipcon_get_group(struct ipcon_peer_handler *iph, char *srvname,
  *
  * Suscribe an existed multicast group.
  * If a group has not been created, return as error.
- *
- * rcv_last_msg:
- *	if set to non-zero value, the last group message will be queued for
- *	reading. This is for multicast message that represent a state.
  */
-int ipcon_join_group(IPCON_HANDLER handler, char *srvname, char *grpname,
-		int rcv_last_msg)
+int ipcon_join_group(IPCON_HANDLER handler, char *srvname, char *grpname)
 {
 	struct ipcon_peer_handler *iph = handler_to_iph(handler);
 	int ret = 0;
@@ -576,8 +569,7 @@ int ipcon_join_group(IPCON_HANDLER handler, char *srvname, char *grpname,
 
 		le_init(&igi->le);
 
-		ret = ipcon_get_group(iph, srvname, grpname,
-				&groupid, rcv_last_msg);
+		ret = ipcon_get_group(iph, srvname, grpname, &groupid);
 
 		if (ret < 0) {
 			free(igi);
