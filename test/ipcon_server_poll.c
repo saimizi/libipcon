@@ -73,18 +73,6 @@ int main(int argc, char *argv[])
 	}
 
 	do {
-		ret = ipcon_join_group(handler, IPCON_NAME,
-				IPCON_KERNEL_GROUP, 0);
-		if (ret < 0) {
-			ipcon_err("Failed to join %s group :%s(%d).\n",
-					IPCON_KERNEL_GROUP,
-					strerror(-ret),
-					-ret);
-			ret = 1;
-			break;
-		}
-
-		ipcon_info("Joined %s group.\n", IPCON_KERNEL_GROUP);
 		ret = ipcon_register_group(handler, GRP_NAME);
 		if (ret < 0) {
 			ipcon_err("Failed to register group: %s (%d)\n",
@@ -100,27 +88,7 @@ int main(int argc, char *argv[])
 
 			timeout.tv_sec = 60;
 			timeout.tv_usec = 0;
-#if 0
-			int fd = ipcon_getfd(handler);
-			fd_set rfds;
 
-			FD_ZERO(&rfds);
-			FD_SET(fd, &rfds);
-
-
-			ret = select(fd + 1, &rfds, NULL, NULL, &timeout);
-			if (ret == 0) {
-				ipcon_info("%s timeout.\n", PEER_NAME);
-				continue;
-			}
-
-			ret = ipcon_rcv(handler, &im);
-			if (ret < 0) {
-				ipcon_err("Rcv mesg failed: %s(%d).\n",
-					strerror(-ret), -ret);
-				continue;
-			}
-#else
 			ret = ipcon_rcv_timeout(handler, &im, &timeout);
 			if (ret < 0) {
 				if (ret == -ETIMEDOUT) {
@@ -138,7 +106,6 @@ int main(int argc, char *argv[])
 
 
 			}
-#endif
 
 			if (im.type == IPCON_NORMAL_MSG)  {
 				assert(strcmp(im.peer, PEER_NAME));

@@ -20,6 +20,7 @@
 #define ipcon_err(fmt, ...) \
 	fprintf(stderr, "[ipcon_logger] Error: "fmt, ##__VA_ARGS__)
 
+#define ASYNC_GRP_MSG	0
 
 static int normal_msg_handler(IPCON_HANDLER handler, struct ipcon_msg *im)
 {
@@ -35,7 +36,7 @@ static int normal_msg_handler(IPCON_HANDLER handler, struct ipcon_msg *im)
 	ipcon_info("%s: %s.\n", im->peer, lm->msg);
 
 	ret = ipcon_send_multicast(handler, LOGGER_GROUP_NAME,
-			im->buf, im->len);
+			im->buf, im->len, ASYNC_GRP_MSG);
 	if (ret < 0)
 		ipcon_err("%s: Failed to send mutlcast message:%s(%d).",
 			LOGGER_PEER_NAME, strerror(-ret), -ret);
