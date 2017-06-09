@@ -46,7 +46,7 @@ static void ipcon_kevent(struct ipcon_msg *im)
 
 		if (!strcmp(ik->group.name, GRP_NAME) &&
 			!strcmp(ik->group.peer_name, SRV_NAME)) {
-			ret = ipcon_join_group(user_h, SRV_NAME, GRP_NAME, 1);
+			ret = ipcon_join_group(user_h, SRV_NAME, GRP_NAME);
 			if (ret < 0) {
 				ipcon_err("%s: Failed to join %s: %s(%d)\n",
 					MYNAME,
@@ -118,7 +118,7 @@ int main(int argc, char *argv[])
 		}
 
 		ret = ipcon_join_group(kevent_h, IPCON_NAME,
-				IPCON_KERNEL_GROUP, 0);
+				IPCON_KERNEL_GROUP);
 		if (ret < 0) {
 			ipcon_err("%s: Failed to join %s :%s(%d).\n",
 					MYNAME,
@@ -133,7 +133,7 @@ int main(int argc, char *argv[])
 				MYNAME,
 				IPCON_KERNEL_GROUP);
 
-		ret = ipcon_join_group(user_h, SRV_NAME, GRP_NAME, 1);
+		ret = ipcon_join_group(user_h, SRV_NAME, GRP_NAME);
 		if (!ret) {
 			srv_group_connected = 1;
 			ipcon_info("%s: Joined %s group.\n",

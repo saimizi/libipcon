@@ -99,7 +99,7 @@ int main(int argc, char *argv[])
 	do {
 
 		ret = ipcon_join_group(handler, IPCON_NAME,
-				IPCON_KERNEL_GROUP, 0);
+				IPCON_KERNEL_GROUP);
 		if (ret < 0)
 			ipcon_err("Failed to get %s group :%s(%d).\n",
 					IPCON_KERNEL_GROUP,
