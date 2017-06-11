@@ -37,7 +37,7 @@ static int normal_msg_handler(IPCON_HANDLER handler, struct ipcon_msg *im)
 				strlen("bye") + 1);
 
 		ipcon_send_multicast(handler, GRP_NAME, "bye",
-				strlen("bye") + 1, SYNC_GRP_MSG);
+				strlen("bye") + 1, ASYNC_GRP_MSG);
 
 		return 1;
 	}
@@ -96,7 +96,7 @@ int main(int argc, char *argv[])
 					ipcon_send_multicast(handler, GRP_NAME,
 							"bye",
 							strlen("bye") + 1,
-							SYNC_GRP_MSG);
+							ASYNC_GRP_MSG);
 					should_quit = 1;
 				} else {
 					ipcon_info("%s : %s (%d).\n", PEER_NAME,
