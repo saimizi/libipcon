@@ -133,12 +133,26 @@ int main(int argc, char *argv[])
 				MYNAME,
 				IPCON_KERNEL_GROUP);
 
-		ret = ipcon_join_group(user_h, SRV_NAME, GRP_NAME);
-		if (!ret) {
-			srv_group_connected = 1;
-			ipcon_info("%s: Joined %s group.\n",
-				MYNAME,
-				GRP_NAME);
+		/*
+		 * is_group_present() takes the following roles:
+		 * 1. judge whether SRV_NAME.GRP_NAME is present.
+		 * 2. add SRV_NAME.GRP_NAME into kevent_h's filter so that the
+		 * add/remove ipcon kevent of SRV_NAME.GRP_NAME will be sent to
+		 * kevent_h.
+		 */
+		ret = is_group_present(kevent_h, SRV_NAME, GRP_NAME);
+		if (ret < 0) {
+			ipcon_err("is_group_present failed.\n");
+			ret = 1;
+			break;
+		} else if (ret > 0) {
+			ret = ipcon_join_group(user_h, SRV_NAME, GRP_NAME);
+			if (!ret) {
+				srv_group_connected = 1;
+				ipcon_info("%s: Joined %s group.\n",
+					MYNAME,
+					GRP_NAME);
+			}
 		}
 
 		while (!should_quit) {
