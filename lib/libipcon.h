@@ -41,6 +41,7 @@ static inline int valid_peer_name(char *name)
 IPCON_HANDLER ipcon_create_handler(char *peer_name, enum peer_type type);
 void ipcon_free_handler(IPCON_HANDLER handler);
 int is_peer_present(IPCON_HANDLER handler, char *name);
+int is_group_present(IPCON_HANDLER handler, char *peer_name, char *group_name);
 int ipcon_rcv(IPCON_HANDLER handler, struct ipcon_msg *im);
 int ipcon_send_unicast(IPCON_HANDLER handler, char *name,
 				void *buf, size_t size);

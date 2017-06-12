@@ -478,6 +478,7 @@ int is_peer_present(IPCON_HANDLER handler, char *name)
 	return ret;
 }
 
+
 static int ipcon_get_group(struct ipcon_peer_handler *iph, char *srvname,
 		char *grpname, __u32 *groupid)
 {
@@ -524,11 +525,22 @@ static int ipcon_get_group(struct ipcon_peer_handler *iph, char *srvname,
 			break;
 		}
 
-		*groupid = nla_get_u32(tb[IPCON_ATTR_GROUP]);
+		if (groupid)
+			*groupid = nla_get_u32(tb[IPCON_ATTR_GROUP]);
 		nlmsg_free(rmsg);
 	} while (0);
 
 	return ret;
+}
+
+int is_group_present(IPCON_HANDLER handler, char *peer_name, char *group_name)
+{
+	struct ipcon_peer_handler *iph = handler_to_iph(handler);
+
+	if (!iph || !valid_name(peer_name) || !valid_name(group_name))
+		return -EINVAL;
+
+	return (ipcon_get_group(iph, peer_name, group_name, NULL) >= 0);
 }
 
 /*

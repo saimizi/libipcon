@@ -3,6 +3,7 @@ VER_0 {
 		ipcon_create_handler;
 		ipcon_free_handler;
 		is_peer_present;
+		is_group_present;
 		ipcon_send_unicast;
 		ipcon_send_multicast;
 		ipcon_join_group;
