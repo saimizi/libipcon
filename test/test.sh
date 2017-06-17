@@ -2,7 +2,7 @@
 
 
 run() {
-	MAX_CNT=100
+	MAX_CNT=$2
 
 	cnt=0
 	while [ 1 ];
@@ -27,8 +27,8 @@ run() {
 	done
 }
 
-run ipcon_user
-run ipcon_sender
+run ipcon_user 1
+run ipcon_sender 50
 
 
 

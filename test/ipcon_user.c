@@ -8,6 +8,7 @@
 #include <pthread.h>
 #include <errno.h>
 #include <string.h>
+#include <sys/time.h>
 
 #include "ipcon.h"
 #include "libipcon.h"
@@ -200,10 +201,34 @@ int main(int argc, char *argv[])
 					continue;
 				}
 
-				ipcon_info("%s: Msg from %s: %s\n",
-					MYNAME,
-					im.group,
-					im.buf);
+				{
+					struct timeval *snd_ts;
+					struct timeval *rcv_ts;
+					struct timeval ts;
+					struct timeval diff;
+
+					gettimeofday(&ts, NULL);
+					snd_ts = (struct timeval *)im.buf;
+					rcv_ts = &ts;
+
+					if (rcv_ts->tv_usec > snd_ts->tv_usec) {
+						diff.tv_sec = rcv_ts->tv_sec -
+							snd_ts->tv_sec;
+						diff.tv_usec = rcv_ts->tv_usec -
+							snd_ts->tv_usec;
+					} else {
+						diff.tv_sec = rcv_ts->tv_sec -
+							snd_ts->tv_sec - 1;
+						diff.tv_usec = 1000000 -
+							snd_ts->tv_usec +
+							rcv_ts->tv_usec;
+					}
+
+					ipcon_info("%s: time: %d.%06d\n",
+						MYNAME,
+						(int)diff.tv_sec,
+						(int)diff.tv_usec);
+				}
 
 
 			} else if (FD_ISSET(kfd, &rfds)) {

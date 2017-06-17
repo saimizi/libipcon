@@ -8,6 +8,7 @@
 #include <pthread.h>
 #include <errno.h>
 #include <string.h>
+#include <sys/time.h>
 
 #include "libipcon.h"
 #include "ipcon_logger.h"
@@ -70,8 +71,7 @@ static int normal_msg_handler(struct ipcon_msg *im)
 		return -1;
 	}
 
-	ipcon_info("Server say %s.\n", im->buf);
-	if (!strcmp(im->buf, "bye"))
+	if (strcmp(im->buf, "OK"))
 		return 1;
 
 	return 0;
@@ -118,14 +118,14 @@ int main(int argc, char *argv[])
 			int skip_sleep = 0;
 
 			if (should_send_msg) {
-				ipcon_info("Send %s to server %s\n",
-						argv[1], SRV_NAME);
+				struct timeval ts;
 
 redo:
+				gettimeofday(&ts, NULL);
 				ret = ipcon_send_unicast(handler,
 						SRV_NAME,
-						argv[1],
-						strlen(argv[1]) + 1);
+						&ts,
+						sizeof(ts));
 
 				if (ret == -EAGAIN) {
 					usleep(100000);

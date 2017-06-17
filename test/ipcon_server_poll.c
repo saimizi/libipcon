@@ -9,6 +9,7 @@
 #include <errno.h>
 #include <string.h>
 #include <assert.h>
+#include <sched.h>
 
 #include "libipcon.h"
 
@@ -42,19 +43,22 @@ static int normal_msg_handler(IPCON_HANDLER handler, struct ipcon_msg *im)
 		return 1;
 	}
 
-	ipcon_info("Msg from sender %s: %s. size=%d.\n",
-			im->peer, im->buf, (int)im->len);
-
-	ret = ipcon_send_unicast(handler,
-			im->peer,
-			"OK",
-			strlen("OK") + 1);
-
 	ret = ipcon_send_multicast(handler, GRP_NAME, im->buf,
 				im->len, ASYNC_GRP_MSG);
-	if (ret < 0)
+
+	if (ret < 0) {
 		ipcon_err("Failed to send mutlcast message:%s(%d).",
 			strerror(-ret), -ret);
+		ret = ipcon_send_unicast(handler,
+				im->peer,
+				"NG",
+				strlen("NG") + 1);
+	} else {
+		ret = ipcon_send_unicast(handler,
+				im->peer,
+				"OK",
+				strlen("OK") + 1);
+	}
 
 	return ret;
 }
