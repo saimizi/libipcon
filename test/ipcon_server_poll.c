@@ -12,6 +12,8 @@
 #include <sched.h>
 
 #include "libipcon.h"
+#include "timestamp_msg.h"
+#include "ipcon_logger.h"
 
 #define ipcon_dbg(fmt, ...) \
 	fprintf(stderr, "[ipcon_server_poll] Debug: "fmt, ##__VA_ARGS__)
@@ -42,6 +44,8 @@ static int normal_msg_handler(IPCON_HANDLER handler, struct ipcon_msg *im)
 
 		return 1;
 	}
+
+	ipcon_logger(handler, "Multicast msg from %s.", im->peer);
 
 	ret = ipcon_send_multicast(handler, GRP_NAME, im->buf,
 				im->len, ASYNC_GRP_MSG);
@@ -112,8 +116,13 @@ int main(int argc, char *argv[])
 			}
 
 			if (im.type == IPCON_NORMAL_MSG)  {
+				struct ts_msg *tm = NULL;
+
 				assert(strcmp(im.peer, PEER_NAME));
 
+				tm = (struct ts_msg *)im.buf;
+
+				tsm_recod("SRV", tm);
 				ret = normal_msg_handler(handler, &im);
 				if (ret == 1)
 					should_quit = 1;

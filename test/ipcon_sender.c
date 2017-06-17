@@ -8,10 +8,10 @@
 #include <pthread.h>
 #include <errno.h>
 #include <string.h>
-#include <sys/time.h>
 
 #include "libipcon.h"
 #include "ipcon_logger.h"
+#include "timestamp_msg.h"
 
 #define ipcon_dbg(fmt, ...) \
 	fprintf(stderr, "[ipcon_sender] Debug: "fmt, ##__VA_ARGS__)
@@ -84,12 +84,6 @@ int main(int argc, char *argv[])
 	IPCON_HANDLER	handler;
 	int should_quit = 0;
 
-
-	if (!argv[1]) {
-		ipcon_err("No message specified.\n");
-		return 1;
-	}
-
 	handler = ipcon_create_handler(NULL, ANON);
 	if (!handler) {
 		ipcon_err("Failed to create handler\n");
@@ -118,14 +112,15 @@ int main(int argc, char *argv[])
 			int skip_sleep = 0;
 
 			if (should_send_msg) {
-				struct timeval ts;
+				struct ts_msg tm;
 
 redo:
-				gettimeofday(&ts, NULL);
+				tsm_init(&tm);
+				tsm_recod("SEN", &tm);
 				ret = ipcon_send_unicast(handler,
 						SRV_NAME,
-						&ts,
-						sizeof(ts));
+						&tm,
+						sizeof(tm));
 
 				if (ret == -EAGAIN) {
 					usleep(100000);
@@ -133,22 +128,12 @@ redo:
 				}
 
 				if (ret < 0 && ret != -ESRCH) {
-					struct logger_msg lm;
-
 					/*
 					 * if fail on the reason other than the
 					 * exit of server, just exit ...
 					 */
 					ipcon_err("Send msg error: %s(%d), quit\n.",
 						strerror(-ret), -ret);
-
-
-					sprintf(lm.msg,
-						"send msg error: %s(%d),quit\n",
-						strerror(-ret), -ret);
-					ipcon_send_unicast(handler,
-							LOGGER_PEER_NAME,
-							&lm, sizeof(lm));
 
 					should_quit = 1;
 					continue;

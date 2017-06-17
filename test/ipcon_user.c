@@ -8,10 +8,11 @@
 #include <pthread.h>
 #include <errno.h>
 #include <string.h>
-#include <sys/time.h>
 
 #include "ipcon.h"
 #include "libipcon.h"
+#include "timestamp_msg.h"
+#include "ipcon_logger.h"
 
 #define ipcon_dbg(fmt, ...) \
 	printf("[ipcon_user] %s-%d " fmt, __func__, __LINE__,  ##__VA_ARGS__)
@@ -176,6 +177,7 @@ int main(int argc, char *argv[])
 			}
 
 			if (FD_ISSET(ufd, &rfds)) {
+
 				ret = ipcon_rcv_nonblock(user_h, &im);
 				if (ret < 0) {
 					ipcon_err("%s: Rcv %s failed: %s(%d)\n",
@@ -202,32 +204,13 @@ int main(int argc, char *argv[])
 				}
 
 				{
-					struct timeval *snd_ts;
-					struct timeval *rcv_ts;
-					struct timeval ts;
-					struct timeval diff;
+					struct ts_msg *tm = NULL;
+					char buf[TSLOG_BUF_SIZE];
 
-					gettimeofday(&ts, NULL);
-					snd_ts = (struct timeval *)im.buf;
-					rcv_ts = &ts;
-
-					if (rcv_ts->tv_usec > snd_ts->tv_usec) {
-						diff.tv_sec = rcv_ts->tv_sec -
-							snd_ts->tv_sec;
-						diff.tv_usec = rcv_ts->tv_usec -
-							snd_ts->tv_usec;
-					} else {
-						diff.tv_sec = rcv_ts->tv_sec -
-							snd_ts->tv_sec - 1;
-						diff.tv_usec = 1000000 -
-							snd_ts->tv_usec +
-							rcv_ts->tv_usec;
-					}
-
-					ipcon_info("%s: time: %d.%06d\n",
-						MYNAME,
-						(int)diff.tv_sec,
-						(int)diff.tv_usec);
+					tm = (struct ts_msg *)im.buf;
+					tsm_recod("USR", tm);
+					tsm_delta(tm, buf, TSLOG_BUF_SIZE);
+					ipcon_logger(user_h, buf);
 				}
 
 
