@@ -13,6 +13,8 @@ libipcon_la_CPPFLAGS =	-g -Wextra \
 			-O2 -U_FORTIFY_SOURCE -D_FORTIFY_SOURCE=2 \
 			-ftrapv \
 			-fstack-protector \
+			-rdynamic \
+			-funwind-tables \
 			-I ${top_builddir}/driver \
 			$(LIBNL_GENL_CFLAGS)
 
