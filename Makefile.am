@@ -1,3 +1,3 @@
 ACLOCAL_AMFLAGS=-I m4
 
-SUBDIRS = driver lib test
+SUBDIRS = lib test

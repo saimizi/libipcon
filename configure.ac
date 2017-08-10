@@ -28,16 +28,7 @@ AX_COMPARE_VERSION( [$LIBNL_GENL_VER],
 		    [AC_MSG_RESULT([yes])],
 		    [AC_MSG_ERROR([version is too old.], [1])]
 		  )
-AC_ARG_WITH([ksrc],
-	AS_HELP_STRING([--with-ksrc],[Linux kernel path.]))
-
-AS_IF([test "x$with_ksrc" != "x"],
-	[ksrc=$with_ksrc],
-	[ksrc="/lib/modules/`uname -r`/build"])
-
-AC_SUBST(ksrc)
 AC_CONFIG_FILES([Makefile
-		 driver/Makefile
 		 lib/Makefile
 		 test/Makefile
 		])
