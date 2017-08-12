@@ -1,8 +1,8 @@
 bin_PROGRAMS = ipcon_server ipcon_sender ipcon_user ipcon_cmd ipcon_server_poll ipcon_logger
 
 common_cflags = -g -O2 -Wall \
-		-I ${top_builddir}/driver/ \
-		-I ${top_builddir}/lib/ \
+		-I ${top_srcdir}/driver/ \
+		-I ${top_srcdir}/lib/ \
 		-rdynamic \
 		-funwind-tables \
 		$(LIBNL_GENL_CFLAGS)

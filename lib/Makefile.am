@@ -15,7 +15,7 @@ libipcon_la_CPPFLAGS =	-g -Wextra \
 			-fstack-protector \
 			-rdynamic \
 			-funwind-tables \
-			-I ${top_builddir}/driver \
+			-I ${top_srcdir}/driver \
 			$(LIBNL_GENL_CFLAGS)
 
 libipcon_la_SOURCES = libipcon.c util.c
