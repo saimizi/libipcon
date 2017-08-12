@@ -22,9 +22,9 @@ LIBNL_GENL_VER="`pkg-config --modversion libnl-genl-3.0`"
 MIN_LIBNL_GENL_VER="3.2.27"
 AC_MSG_CHECKING([if libnl-genl version  $LIBNL_GENL_VER >= $MIN_LIBNL_GENL_VER])
 
-AX_COMPARE_VERSION( [$LIBNL_GENL_VER],
+AX_COMPARE_VERSION( [${LIBNL_GENL_VER}],
 		    [ge],
-		    [$MIN_LIBNL_GENL_VER],
+		    [${MIN_LIBNL_GENL_VER}],
 		    [AC_MSG_RESULT([yes])],
 		    [AC_MSG_ERROR([version is too old.], [1])]
 		  )
@@ -41,8 +41,5 @@ ${PACKAGE_NAME} Version ${PACKAGE_VERSION}
 
 Prefix: '${prefix}'.
 Compiler: '${CC} ${CFLAGS} ${CPPFLAGS}'
-
-Package features:
-	kernel src: ${ksrc}
 
 -------------------------------------------------"
