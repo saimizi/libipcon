@@ -1,4 +1,5 @@
 lib_LTLIBRARIES = libipcon.la
+include_HEADERS = ${srcdir}/libipcon.h
 
 libipcon_la_CPPFLAGS =	-g -Wextra \
 			-Werror \
