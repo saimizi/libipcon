@@ -6,9 +6,11 @@
 #include <netlink/genl/ctrl.h>
 #include <unistd.h>
 #include <pthread.h>
+#include <semaphore.h>
 #include <errno.h>
 #include <string.h>
 #include <assert.h>
+#include <jslist.h>
 
 #include "libipcon.h"
 
@@ -20,81 +22,108 @@
 	fprintf(stderr, "[ipcon_server] Error: "fmt, ##__VA_ARGS__)
 
 #define PEER_NAME	"ipcon_server"
-#define GRP_NAME	"str_msg"
+#define GRP_NAME	"StrMsgServer"
 
 #define SYNC_GRP_MSG	1
 #define ASYNC_GRP_MSG	0
 
-char *src_peer;
+struct gs_event {
+	struct list_node node;
+	struct ipcon_msg msg;
+};
 
-static void ipcon_kevent(struct ipcon_msg *im)
+pthread_t group_sender_id;
+sem_t sem_group_sender;
+pthread_mutex_t mutex_group_sender;
+struct list_node_head gs_event_qeue;
+
+
+void gs_lock() {
+	pthread_mutex_lock(&mutex_group_sender);
+}
+
+void gs_unlock() {
+	pthread_mutex_unlock(&mutex_group_sender);
+}
+
+char gs_buf[IPCON_MAX_NAME_LEN + IPCON_MAX_MSG_LEN + 16];
+void * group_sender(void *para)
 {
-	struct ipcon_kevent *ik;
+	IPCON_HANDLER handler = (IPCON_HANDLER)para;
 
-	if (!im)
-		return;
+	while (1) {
+		struct gs_event *ge = NULL;
+		struct list_node_head local_event_queue;
 
-	ik = (struct ipcon_kevent *)im->buf;
+		sem_wait(&sem_group_sender);
+		gs_lock();
+		list_init_head(&local_event_queue);
+		list_move(&gs_event_qeue, &local_event_queue);
+		gs_unlock();
 
-	switch (ik->type) {
-	case IPCON_EVENT_PEER_REMOVE:
-		if (!src_peer)
-			break;
+		struct list_node *it;
+		while (ge = LIST_POP(&local_event_queue,
+				struct gs_event, node, it)) {
 
-		if (!strcmp(ik->peer.name, src_peer)) {
-			ipcon_info("Detected %s removed.\n", ik->peer.name);
-			free(src_peer);
-			src_peer = NULL;
+			if (ge->msg.type == IPCON_MSG_UNICAST) {
+				ipcon_info("IPCON_MSG_UNICAST \n");
+				sprintf(gs_buf, "%s : %s\n", ge->msg.peer, ge->msg.buf);
+			} else {
+				ipcon_info("IPCON_GROUP_MSG : %s\n", ge->msg.group);
+
+				if (strcmp(ge->msg.group, IPCON_KERNEL_GROUP)) {
+					free(ge);
+					continue;
+				}
+
+				struct ipcon_kevent * ik;
+				ik = (struct ipcon_kevent *)ge->msg.buf;
+
+				switch (ik->type) {
+				case IPCON_EVENT_PEER_ADD:
+					sprintf(gs_buf, "%s : peer %s added\n",
+						IPCON_KERNEL_GROUP,
+						ik->peer.name);
+					break;
+
+				case IPCON_EVENT_PEER_REMOVE:
+					sprintf(gs_buf, "%s : peer %s removed\n",
+						IPCON_KERNEL_GROUP,
+						ik->peer.name);
+					break;
+
+				case IPCON_EVENT_GRP_ADD:
+					sprintf(gs_buf, "%s : group %s of peer %s added\n",
+						IPCON_KERNEL_GROUP,
+						ik->group.name,
+						ik->group.peer_name);
+					break;
+
+				case IPCON_EVENT_GRP_REMOVE:
+					sprintf(gs_buf, "%s : group %s of peer %s removed\n",
+						IPCON_KERNEL_GROUP,
+						ik->group.name,
+						ik->group.peer_name);
+					break;
+
+				default:
+					break;
+				}
+			}
+
+			ipcon_info("%s\n", gs_buf);
+			ipcon_send_multicast(handler,
+					GRP_NAME,
+					gs_buf,
+					strlen(gs_buf) + 1,
+					SYNC_GRP_MSG);
+			free(ge);
 		}
-		break;
-	default:
-		break;
 	}
+
+	return NULL;
 }
 
-static int normal_msg_handler(IPCON_HANDLER handler, struct ipcon_msg *im)
-{
-	int ret = 0;
-
-	if (!handler || !im)
-		return -EINVAL;
-
-	if (!strcmp(im->buf, "bye")) {
-		ipcon_send_unicast(handler, im->peer, "bye",
-				strlen("bye") + 1);
-
-		if (src_peer && strcmp(im->peer, src_peer))
-			ipcon_send_unicast(handler, src_peer, "bye",
-				strlen("bye") + 1);
-
-		ipcon_send_multicast(handler, GRP_NAME, "bye",
-				strlen("bye") + 1, SYNC_GRP_MSG);
-
-
-		return 1;
-	}
-
-	if (!src_peer)
-		return 0;
-
-	if (!strcmp(im->peer, src_peer)) {
-		ipcon_info("Msg from sender %s: %s. size=%d.\n",
-				im->peer, im->buf, (int)im->len);
-
-		ret = ipcon_send_unicast(handler,
-				im->peer,
-				"OK",
-				strlen("OK") + 1);
-
-		ret = ipcon_send_multicast(handler, GRP_NAME,
-				im->buf, im->len, ASYNC_GRP_MSG);
-		if (ret < 0)
-			ipcon_err("Failed to send mutlcast message:%s(%d).",
-				strerror(-ret), -ret);
-	}
-
-	return ret;
-}
 
 int main(int argc, char *argv[])
 {
@@ -131,8 +160,19 @@ int main(int argc, char *argv[])
 
 		ipcon_info("Register group %s succeed.\n", GRP_NAME);
 
+		list_init_head(&gs_event_qeue);
+		pthread_mutex_init(&mutex_group_sender, NULL);
+		sem_init(&sem_group_sender, 0, 0);
+
+		ret = pthread_create(&group_sender_id,
+					NULL,
+					group_sender,
+					(void *)handler);
+
+
 		while (!should_quit) {
 			struct ipcon_msg im;
+			struct gs_event *ge = NULL;
 
 			memset(&im, 0, sizeof(im));
 			ret = ipcon_rcv(handler, &im);
@@ -142,30 +182,15 @@ int main(int argc, char *argv[])
 				continue;
 			}
 
-			if (im.type == IPCON_NORMAL_MSG)  {
-				assert(strcmp(im.peer, PEER_NAME));
+			ge = (struct gs_event *)malloc(sizeof (*ge));
+			list_init_node(&ge->node);
+			memcpy(&ge->msg, &im, sizeof(im));
 
-				if (!src_peer)
-					src_peer = strdup(im.peer);
+			gs_lock();
+			list_append(&gs_event_qeue, &ge->node);
+			sem_post(&sem_group_sender);
+			gs_unlock();
 
-				if (!src_peer) {
-					ipcon_err("No memory.\n");
-					should_quit = 1;
-					continue;
-				}
-
-				ret = normal_msg_handler(handler, &im);
-				if (ret == 1)
-					should_quit = 1;
-
-			} else if (im.type == IPCON_GROUP_MSG) {
-				if (!strcmp(im.group, IPCON_KERNEL_GROUP))
-					ipcon_kevent(&im);
-
-			} else {
-				ipcon_err("Invalid message type (%lu).\n",
-					(unsigned long)im.type);
-			}
 		}
 
 		ret = ipcon_unregister_group(handler, GRP_NAME);

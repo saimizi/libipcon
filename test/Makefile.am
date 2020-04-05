@@ -12,7 +12,7 @@ common_ldflags =$(LIBNL_GENL_LIBS)
 ipcon_server_SOURCES = ipcon_server.c
 ipcon_server_CFLAGS =$(common_cflags)
 ipcon_server_LDFLAGS= -L${top_builddir}/lib/.libs
-ipcon_server_LDADD = $(common_ldflags) -lipcon
+ipcon_server_LDADD = $(common_ldflags) -lipcon -ljslist
 
 ipcon_sender_SOURCES = ipcon_sender.c
 ipcon_sender_CFLAGS =$(common_cflags)
