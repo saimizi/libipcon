@@ -23,6 +23,11 @@ struct ipcon_nl_data {
 	void	*d_data;
 };
 
+void __attribute__ ((constructor)) libipcon_init(void)
+{
+	libipcon_dbg_init();
+}
+
 /*
  * Basically libnl error code are not expected.
  * We just want a errno number which is partly destroyed by libnl...
