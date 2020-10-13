@@ -14,28 +14,23 @@
 
 
 struct ipcon_msg {
-	__u32 type;
-	union {
-		char group[IPCON_MAX_NAME_LEN];
-		char peer[IPCON_MAX_NAME_LEN];
-	};
-	char buf[IPCON_MAX_MSG_LEN];
-	__u32 len;
+        __u32 type;
+        char group[IPCON_MAX_NAME_LEN];
+        char peer[IPCON_MAX_NAME_LEN];
+        char buf[IPCON_MAX_MSG_LEN];
+        __u32 len;
 };
 
-static inline int valid_peer_name(char *name)
+static inline ipconmsg_cmd(struct nl_msg *msg)
 {
-	size_t len;
-
-	if (!name)
-		return 0;
-
-	len = strlen(name);
-	if (len > 0 && len < IPCON_MAX_NAME_LEN - 1)
-		return 1;
-
-	return 0;
+	(struct ipcon_msghdr *)nlmsg_data(nlmsg_hdr(msg))->cmd;
 }
+
+static inline ipconmsg_version(struct nl_msg *msg)
+{
+	(struct ipcon_msghdr *)nlmsg_data(nlmsg_hdr(msg))->version;
+}
+
 
 
 IPCON_HANDLER ipcon_create_handler(char *peer_name, enum peer_type type);
