@@ -100,15 +100,13 @@ IPCON_HANDLER ipcon_create_handler(char *peer_name)
 		int family;
 		struct nl_msg *msg = NULL;
 
-
-		if (!valid_name(peer_name))
-			break;
-
 		ipcon_dbg("Peer name: %s\n", peer_name);
 
 		iph = malloc(sizeof(*iph));
 		if (!iph)
 			break;
+
+		memset(iph, 0, sizeof(*iph));
 
 		if (peer_name) {
 			iph->name = strdup(peer_name);
@@ -156,6 +154,8 @@ void ipcon_free_handler(IPCON_HANDLER handler)
 {
 	struct ipcon_peer_handler *iph = handler_to_iph(handler);
 
+	ipcon_dbg("enter: %s\n", __func__);
+
 	if (!iph)
 		return;
 
@@ -165,6 +165,8 @@ void ipcon_free_handler(IPCON_HANDLER handler)
 	free(iph->name);
 
 	free(iph);
+
+	ipcon_dbg("leave %s \n", __func__);
 }
 
 int ipcon_register_group(IPCON_HANDLER handler, char *name)
@@ -175,6 +177,8 @@ int ipcon_register_group(IPCON_HANDLER handler, char *name)
 	struct nlmsghdr *nlh = NULL;
 	struct nl_msg *msg = NULL;
 	struct nlattr *tb[NUM_IPCON_ATTR];
+
+	ipcon_dbg("enter: %s\n", __func__);
 
 	if (!iph || !name)
 		return -EINVAL;
@@ -202,6 +206,7 @@ int ipcon_register_group(IPCON_HANDLER handler, char *name)
 	nlmsg_free(msg);
 
 
+	ipcon_dbg("leave: %s ret = %d\n", __func__, ret);
 	return ret;
 }
 
@@ -215,6 +220,8 @@ int is_peer_present(IPCON_HANDLER handler, char *name)
 	struct nl_msg *msg = NULL;
 	struct nl_msg *rmsg = NULL;
 	struct nlattr *tb[NUM_IPCON_ATTR];
+
+	ipcon_dbg("enter: %s\n", __func__);
 
 	if (!iph)
 		return -EINVAL;
@@ -241,6 +248,8 @@ int is_peer_present(IPCON_HANDLER handler, char *name)
 	} while (0);
 	nlmsg_free(msg);
 
+	ipcon_dbg("leave: %s ret= %d\n", __func__, ret);
+
 	return ret == 0;
 }
 
@@ -256,6 +265,8 @@ static int ipcon_get_group(struct ipcon_peer_handler *iph, char *peer_name,
 	struct nl_msg *rmsg = NULL;
 
 	do {
+		ipcon_dbg("enter: %s\n", __func__);
+
 		msg = nlmsg_alloc();
 		if (!msg) {
 			ret = -ENOMEM;
@@ -285,6 +296,8 @@ static int ipcon_get_group(struct ipcon_peer_handler *iph, char *peer_name,
 
 	nlmsg_free(msg);
 	nlmsg_free(rmsg);
+
+	ipcon_dbg("leave: %s ret=%d\n", __func__, ret);
 
 	return ret;
 }

@@ -10,6 +10,7 @@
 #include <assert.h>
 
 #include "libipcon_priv.h"
+#include "libipcon_dbg.h"
 
 
 static uint32_t newport(void)
@@ -103,11 +104,8 @@ void *ipconmsg_put(struct nl_msg *msg, struct ipcon_channel *ic,
 	struct nlmsghdr *nlh;
 	struct ipcon_msghdr *hdr = NULL;
 
-	if (!flags)
-		flags |= NLM_F_REQUEST;
-
 	nlh = nlmsg_put(msg, NL_AUTO_PORT, NL_AUTO_SEQ, type,
-			IPCONMSG_HDRLEN, flags);
+			IPCONMSG_HDRLEN, flags | NLM_F_REQUEST);
 	if (nlh) {
 		hdr =  nlmsg_data(nlh);
 		hdr->cmd = cmd;
@@ -160,8 +158,14 @@ int ipcon_cb_valid(struct nl_msg *msg, void *arg)
 {
 	struct ipconmsg_result *ir = arg;
 
+	ipcon_dbg("enter: %s\n", __func__);
+
 	nlmsg_get(msg);
 	ir->msg = msg;
+
+	ipcon_dbg("leave: %s\n", __func__);
+
+	return 0;
 }
 
 int ipcon_recvmsg(struct ipcon_channel *ic, struct nl_msg **msg)
@@ -173,6 +177,8 @@ int ipcon_recvmsg(struct ipcon_channel *ic, struct nl_msg **msg)
 	};
 	struct nl_cb *cb = nl_cb_alloc(NL_CB_CUSTOM);
 
+	ipcon_dbg("enter: %s\n", __func__);
+
 	assert(cb);
 
 	nl_cb_set(cb, NL_CB_VALID, NL_CB_CUSTOM, ipcon_cb_valid, &ir);
@@ -183,7 +189,9 @@ int ipcon_recvmsg(struct ipcon_channel *ic, struct nl_msg **msg)
 	else
 		nlmsg_free(ir.msg);
 
-	return ret;
+	ipcon_dbg("leave: %s nlerr: ret=%d\n", __func__, ret);
+
+	return ret < 0 ? nlerr2syserr(ret) : ret;
 }
 
 int ipcon_send_rcv(struct ipcon_channel *ic, struct nl_msg *msg,
@@ -191,12 +199,14 @@ int ipcon_send_rcv(struct ipcon_channel *ic, struct nl_msg *msg,
 {
 	int ret = 0;
 
+	ipcon_dbg("enter: %s\n", __func__);
 	do {
 		ret = ipcon_sendto(ic, msg);
 		if (!ret)
 			ret = ipcon_recvmsg(ic, rmsg);
 	} while (0);
 
+	ipcon_dbg("leave: %s ret=%d\n", __func__, ret);
 	return ret;
 }
 
