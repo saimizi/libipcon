@@ -9,31 +9,19 @@
 
 #define IPCON_MAX_USR_GROUP	5
 
-#define IPCON_NORMAL_MSG	IPCON_MSG_UNICAST
-#define IPCON_GROUP_MSG		IPCON_MSG_MULTICAST
+#define IPCON_NORMAL_MSG	IPCON_USR_MSG
+#define IPCON_GROUP_MSG		IPCON_MULTICAST_MSG
 
 
 struct ipcon_msg {
-        __u32 type;
-        char group[IPCON_MAX_NAME_LEN];
-        char peer[IPCON_MAX_NAME_LEN];
-        char buf[IPCON_MAX_MSG_LEN];
-        __u32 len;
+	__u32 type;
+	char group[IPCON_MAX_NAME_LEN];
+	char peer[IPCON_MAX_NAME_LEN];
+	char buf[MAX_IPCONMSG_DATA_SIZE];
+	__u32 len;
 };
 
-static inline ipconmsg_cmd(struct nl_msg *msg)
-{
-	(struct ipcon_msghdr *)nlmsg_data(nlmsg_hdr(msg))->cmd;
-}
-
-static inline ipconmsg_version(struct nl_msg *msg)
-{
-	(struct ipcon_msghdr *)nlmsg_data(nlmsg_hdr(msg))->version;
-}
-
-
-
-IPCON_HANDLER ipcon_create_handler(char *peer_name, enum peer_type type);
+IPCON_HANDLER ipcon_create_handler(char *peer_name);
 void ipcon_free_handler(IPCON_HANDLER handler);
 int is_peer_present(IPCON_HANDLER handler, char *name);
 int is_group_present(IPCON_HANDLER handler, char *peer_name, char *group_name);
@@ -44,8 +32,10 @@ int ipcon_register_group(IPCON_HANDLER handler, char *name);
 int ipcon_unregister_group(IPCON_HANDLER handler, char *name);
 int ipcon_join_group(IPCON_HANDLER handler, char *srvname, char *grpname);
 int ipcon_leave_group(IPCON_HANDLER handler, char *srvname, char *grpname);
-__u32 ipcon_get_selfport(IPCON_HANDLER handler);
-int ipcon_getfd(IPCON_HANDLER handler);
+
+int ipcon_get_read_fd(IPCON_HANDLER handler);
+int ipcon_get_write_fd(IPCON_HANDLER handler);
+
 int ipcon_find_group(IPCON_HANDLER handler, char *name, __u32 *groupid);
 int ipcon_send_multicast(IPCON_HANDLER handler, char *name, void *buf,
 			size_t size, int sync);

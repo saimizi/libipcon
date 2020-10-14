@@ -46,7 +46,7 @@ void gs_unlock() {
 	pthread_mutex_unlock(&mutex_group_sender);
 }
 
-char gs_buf[IPCON_MAX_NAME_LEN + IPCON_MAX_MSG_LEN + 16];
+char *gs_buf;
 void * group_sender(void *para)
 {
 	IPCON_HANDLER handler = (IPCON_HANDLER)para;
@@ -65,13 +65,13 @@ void * group_sender(void *para)
 		while (ge = LIST_POP(&local_event_queue,
 				struct gs_event, node, it)) {
 
-			if (ge->msg.type == IPCON_MSG_UNICAST) {
+			if (ge->msg.type == IPCON_NORMAL_MSG) {
 				ipcon_info("IPCON_MSG_UNICAST \n");
 				sprintf(gs_buf, "%s : %s\n", ge->msg.peer, ge->msg.buf);
 			} else {
 				ipcon_info("IPCON_GROUP_MSG : %s\n", ge->msg.group);
 
-				if (strcmp(ge->msg.group, IPCON_KERNEL_GROUP)) {
+				if (strcmp(ge->msg.group, IPCON_KERNEL_GROUP_NAME)) {
 					free(ge);
 					continue;
 				}
@@ -82,26 +82,26 @@ void * group_sender(void *para)
 				switch (ik->type) {
 				case IPCON_EVENT_PEER_ADD:
 					sprintf(gs_buf, "%s : peer %s added\n",
-						IPCON_KERNEL_GROUP,
+						IPCON_KERNEL_GROUP_NAME,
 						ik->peer.name);
 					break;
 
 				case IPCON_EVENT_PEER_REMOVE:
 					sprintf(gs_buf, "%s : peer %s removed\n",
-						IPCON_KERNEL_GROUP,
+						IPCON_KERNEL_GROUP_NAME,
 						ik->peer.name);
 					break;
 
 				case IPCON_EVENT_GRP_ADD:
 					sprintf(gs_buf, "%s : group %s of peer %s added\n",
-						IPCON_KERNEL_GROUP,
+						IPCON_KERNEL_GROUP_NAME,
 						ik->group.name,
 						ik->group.peer_name);
 					break;
 
 				case IPCON_EVENT_GRP_REMOVE:
 					sprintf(gs_buf, "%s : group %s of peer %s removed\n",
-						IPCON_KERNEL_GROUP,
+						IPCON_KERNEL_GROUP_NAME,
 						ik->group.name,
 						ik->group.peer_name);
 					break;
@@ -132,25 +132,29 @@ int main(int argc, char *argv[])
 	IPCON_HANDLER	handler;
 	int should_quit = 0;
 
-	handler = ipcon_create_handler(PEER_NAME, SERVICE_PUBLISHER);
+	handler = ipcon_create_handler(PEER_NAME);
 	if (!handler) {
 		ipcon_err("Failed to create handler\n");
 		return 1;
 	}
 
+	gs_buf = malloc(IPCON_MAX_NAME_LEN + MAX_IPCONMSG_DATA_SIZE + 16);
+	if (!gs_buf)
+		return 1;
+
 	do {
 		ret = ipcon_join_group(handler, IPCON_NAME,
-				IPCON_KERNEL_GROUP);
+				IPCON_KERNEL_GROUP_NAME);
 		if (ret < 0) {
 			ipcon_err("Failed to join %s group :%s(%d).\n",
-					IPCON_KERNEL_GROUP,
+					IPCON_KERNEL_GROUP_NAME,
 					strerror(-ret),
 					-ret);
 			ret = 1;
 			break;
 		}
 
-		ipcon_info("Joined %s group.\n", IPCON_KERNEL_GROUP);
+		ipcon_info("Joined %s group.\n", IPCON_KERNEL_GROUP_NAME);
 		ret = ipcon_register_group(handler, GRP_NAME);
 		if (ret < 0) {
 			ipcon_err("Failed to register group: %s (%d)\n",

@@ -2,6 +2,8 @@
 #define __LIBIPCON_PRIV_H__
 
 #include "libipcon.h"
+#include <linux/netlink.h>
+#include <netlink/msg.h>
 #include "util.h"
 
 #define IPCON_ANY_CMD	IPCON_CMD_MAX
@@ -26,38 +28,54 @@ struct ipcon_peer_handler {
 	struct link_entry_head grp; /* Must be first */
 	char *name;
 	uint32_t flags;
-	struct ipcon_channel chan;
-	struct ipcon_channel ctrl_chan;
+	struct ipcon_channel s_chan;
+	struct ipcon_channel c_chan;
+	struct ipcon_channel r_chan;
 };
 
-static inline void ipcon_ctrl_lock(struct ipcon_peer_handler *iph)
+static inline void ipcon_c_lock(struct ipcon_peer_handler *iph)
 {
-	pthread_mutex_lock(&iph->ctrl_chan.mutex);
+	pthread_mutex_lock(&iph->c_chan.mutex);
 }
 
-static inline int ipcon_ctrl_trylock(struct ipcon_peer_handler *iph)
+static inline int ipcon_c_trylock(struct ipcon_peer_handler *iph)
 {
-	return -pthread_mutex_trylock(&iph->ctrl_chan.mutex);
+	return -pthread_mutex_trylock(&iph->c_chan.mutex);
 }
 
-static inline void ipcon_ctrl_unlock(struct ipcon_peer_handler *iph)
+static inline void ipcon_c_unlock(struct ipcon_peer_handler *iph)
 {
-	pthread_mutex_unlock(&iph->ctrl_chan.mutex);
+	pthread_mutex_unlock(&iph->c_chan.mutex);
 }
 
-static inline void ipcon_com_lock(struct ipcon_peer_handler *iph)
+static inline void ipcon_s_lock(struct ipcon_peer_handler *iph)
 {
-	pthread_mutex_lock(&iph->chan.mutex);
+	pthread_mutex_lock(&iph->s_chan.mutex);
 }
 
-static inline int ipcon_com_trylock(struct ipcon_peer_handler *iph)
+static inline int ipcon_s_trylock(struct ipcon_peer_handler *iph)
 {
-	return -pthread_mutex_trylock(&iph->chan.mutex);
+	return -pthread_mutex_trylock(&iph->s_chan.mutex);
 }
 
-static inline void ipcon_com_unlock(struct ipcon_peer_handler *iph)
+static inline void ipcon_s_unlock(struct ipcon_peer_handler *iph)
 {
-	pthread_mutex_unlock(&iph->chan.mutex);
+	pthread_mutex_unlock(&iph->s_chan.mutex);
+}
+
+static inline void ipcon_r_lock(struct ipcon_peer_handler *iph)
+{
+	pthread_mutex_lock(&iph->r_chan.mutex);
+}
+
+static inline int ipcon_r_trylock(struct ipcon_peer_handler *iph)
+{
+	return -pthread_mutex_trylock(&iph->r_chan.mutex);
+}
+
+static inline void ipcon_r_unlock(struct ipcon_peer_handler *iph)
+{
+	pthread_mutex_unlock(&iph->r_chan.mutex);
 }
 
 #define handler_to_iph(h) ((struct ipcon_peer_handler *) h)
@@ -71,24 +89,56 @@ static inline void ipcon_com_unlock(struct ipcon_peer_handler *iph)
 
 static inline int nlerr2syserr(int nlerr)
 {
-	switch (abs(nlerror)) {
-	case NLE_BAD_SOCK:	return EBADF;
-	case NLE_EXIST:		return EEXIST;
-	case NLE_NOADDR:	return EADDRNOTAVAIL;
-	case NLE_OBJ_NOTFOUND:	return ENOENT;
-	case NLE_INTR:		return EINTR;
-	case NLE_AGAIN:		return EAGAIN;
-	case NLE_INVAL:		return EINVAL;
-	case NLE_NOACCESS:	return EACCES;
-	case NLE_NOMEM:		return ENOMEM;
-	case NLE_AF_NOSUPPORT:	return EAFNOSUPPORT;
-	case NLE_PROTO_MISMATCH:return EPROTONOSUPPORT;
-	case NLE_OPNOTSUPP:	return EOPNOTSUPP;
-	case NLE_PERM:		return EPERM;
-	case NLE_BUSY:		return EBUSY;
-	case NLE_RANGE:		return ERANGE;
-	case NLE_NODEV:		return ENODEV;
-	default:		return EREMOTEIO;
+	switch (abs(nlerr)) {
+	case NLE_BAD_SOCK:	return -EBADF;
+	case NLE_EXIST:		return -EEXIST;
+	case NLE_NOADDR:	return -EADDRNOTAVAIL;
+	case NLE_OBJ_NOTFOUND:	return -ENOENT;
+	case NLE_INTR:		return -EINTR;
+	case NLE_AGAIN:		return -EAGAIN;
+	case NLE_INVAL:		return -EINVAL;
+	case NLE_NOACCESS:	return -EACCES;
+	case NLE_NOMEM:		return -ENOMEM;
+	case NLE_AF_NOSUPPORT:	return -EAFNOSUPPORT;
+	case NLE_PROTO_MISMATCH:return -EPROTONOSUPPORT;
+	case NLE_OPNOTSUPP:	return -EOPNOTSUPP;
+	case NLE_PERM:		return -EPERM;
+	case NLE_BUSY:		return -EBUSY;
+	case NLE_RANGE:		return -ERANGE;
+	case NLE_NODEV:		return -ENODEV;
+	default:
+		break;
+	}
+	return -EREMOTEIO;
 }
+
+static inline __u8 ipconmsg_cmd(struct nl_msg *msg)
+{
+	((struct ipcon_msghdr *)nlmsg_data(nlmsg_hdr(msg)))->cmd;
+}
+
+static inline __u16 ipconmsg_version(struct nl_msg *msg)
+{
+	((struct ipcon_msghdr *)nlmsg_data(nlmsg_hdr(msg)))->version;
+}
+
+static inline void ipconmsg_complete(struct ipcon_channel *ic,
+		struct nl_msg *msg)
+{
+	nl_complete_msg(ic->sk, msg);
+}
+
+void *ipconmsg_put(struct nl_msg *msg, struct ipcon_channel *ic,
+		enum ipcon_msg_type type, int flags, __u8 cmd);
+
+int ipcon_chan_init(struct ipcon_peer_handler *iph);
+void ipcon_chan_destory(struct ipcon_channel *ic);
+int ipcon_recvmsg(struct ipcon_channel *ic, struct nl_msg **msg);
+int ipcon_send_rcv(struct ipcon_channel *ic, struct nl_msg *msg,
+			struct nl_msg **rmsg);
+int ipcon_parse(struct nl_msg *msg, struct nlattr *tb[], int maxtype,
+		const struct nla_policy *policy);
+struct nlattr *ipcon_find_attr(struct nl_msg *msg,  int attrtype);
+
 
 #endif

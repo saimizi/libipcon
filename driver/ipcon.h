@@ -52,13 +52,14 @@ struct ipcon_msghdr {
 
 enum {
 	IPCON_ATTR_UNSPEC,
-	IPCON_ATTR_PORT,
+	IPCON_ATTR_CPORT,	/* ctrl port */
+	IPCON_ATTR_SPORT,	/* sending port */
+	IPCON_ATTR_RPORT,	/* receiving port */
 	IPCON_ATTR_GROUP,
 	IPCON_ATTR_PEER_NAME,
 	IPCON_ATTR_GROUP_NAME,
 	IPCON_ATTR_DATA,
 	IPCON_ATTR_FLAG,
-	IPCON_ATTR_PEER_TYPE,
 	/* Add attr here */
 
 	IPCON_ATTR_AFTER_LAST,

@@ -11,7 +11,7 @@
 #include <sys/time.h>
 #include "libipcon.h"
 
-#define LOGGER_MSG_LIMIT	(IPCON_MAX_MSG_LEN - sizeof(struct timeval))
+#define LOGGER_MSG_LIMIT	(MAX_IPCONMSG_DATA_SIZE - sizeof(struct timeval))
 #define IPCON_LOGGER_MSG_LEN	LOGGER_MSG_LIMIT
 
 struct logger_msg {

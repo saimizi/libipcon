@@ -57,7 +57,7 @@ int main(int argc, char *argv[])
 
 	setvbuf(logfile, NULL, _IONBF, 0);
 
-	handler = ipcon_create_handler(LOGGER_PEER_NAME, SERVICE);
+	handler = ipcon_create_handler(LOGGER_PEER_NAME);
 	if (!handler) {
 		fclose(logfile);
 		ipcon_err("Failed to create handler\n");

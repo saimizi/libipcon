@@ -9,7 +9,8 @@ VER_0 {
 		ipcon_join_group;
 		ipcon_leave_group;
 		ipcon_get_selfport;
-		ipcon_getfd;
+		ipcon_get_read_fd;
+		ipcon_get_write_fd;
 		ipcon_join_group;
 		ipcon_register_group;
 		ipcon_unregister_group;

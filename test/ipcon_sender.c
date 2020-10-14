@@ -84,7 +84,7 @@ int main(int argc, char *argv[])
 	IPCON_HANDLER	handler;
 	int should_quit = 0;
 
-	handler = ipcon_create_handler(NULL, ANON);
+	handler = ipcon_create_handler(NULL);
 	if (!handler) {
 		ipcon_err("Failed to create handler\n");
 		return 1;

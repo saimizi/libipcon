@@ -19,6 +19,6 @@ libipcon_la_CPPFLAGS =	-g -Wextra \
 			-I ${top_srcdir}/driver \
 			$(LIBNL_GENL_CFLAGS)
 
-libipcon_la_SOURCES = libipcon.c util.c libipcon_dbg.c
+libipcon_la_SOURCES = libipcon.c util.c libipcon_dbg.c libipcon_priv.c
 libipcon_la_LIBADD = -lpthread $(LIBNL_GENL_LIBS)
 libipcon_la_LDFLAGS = -Wl,--version-script,${srcdir}/ipcon.map -version-info 0:0:0

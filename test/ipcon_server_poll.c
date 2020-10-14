@@ -74,7 +74,7 @@ int main(int argc, char *argv[])
 	IPCON_HANDLER	handler;
 	int should_quit = 0;
 
-	handler = ipcon_create_handler(PEER_NAME, SERVICE_PUBLISHER);
+	handler = ipcon_create_handler(PEER_NAME);
 	if (!handler) {
 		ipcon_err("Failed to create handler\n");
 		return 1;

@@ -107,33 +107,31 @@ int main(int argc, char *argv[])
 
 	do {
 		/* Create server handler */
-		kevent_h = ipcon_create_handler(NULL, ANON);
+		kevent_h = ipcon_create_handler(NULL);
 		if (!kevent_h) {
 			ipcon_err("Failed to create libipcon handler.\n");
 			break;
 		}
 
-		user_h = ipcon_create_handler(NULL, ANON);
+		user_h = ipcon_create_handler(NULL);
 		if (!user_h) {
 			ipcon_err("Failed to create libipcon handler.\n");
 			break;
 		}
 
 		ret = ipcon_join_group(kevent_h, IPCON_NAME,
-				IPCON_KERNEL_GROUP);
+				IPCON_KERNEL_GROUP_NAME);
 		if (ret < 0) {
-			ipcon_err("%s: Failed to join %s :%s(%d).\n",
-					MYNAME,
-					IPCON_KERNEL_GROUP,
+			ipcon_err("%s: Failed to join %s :%s(%d).\n", MYNAME,
+					IPCON_KERNEL_GROUP_NAME,
 					strerror(-ret),
 					-ret);
 			ret = 1;
 			break;
 		}
 
-		ipcon_info("%s: Joined %s group.\n",
-				MYNAME,
-				IPCON_KERNEL_GROUP);
+		ipcon_info("%s: Joined %s group.\n", MYNAME,
+				IPCON_KERNEL_GROUP_NAME);
 
 		/*
 		 * is_group_present() takes the following roles:
@@ -151,8 +149,7 @@ int main(int argc, char *argv[])
 			ret = ipcon_join_group(user_h, SRV_NAME, GRP_NAME);
 			if (!ret) {
 				srv_group_connected = 1;
-				ipcon_info("%s: Joined %s group.\n",
-					MYNAME,
+				ipcon_info("%s: Joined %s group.\n", MYNAME,
 					GRP_NAME);
 			}
 		}
@@ -160,8 +157,8 @@ int main(int argc, char *argv[])
 		while (!should_quit) {
 			struct ipcon_msg im;
 			fd_set rfds;
-			int kfd = ipcon_getfd(kevent_h);
-			int ufd = ipcon_getfd(user_h);
+			int kfd = ipcon_get_read_fd(kevent_h);
+			int ufd = ipcon_get_read_fd(user_h);
 			int nfd = (kfd > ufd) ? kfd + 1 : ufd + 1;
 
 			FD_ZERO(&rfds);
@@ -170,8 +167,7 @@ int main(int argc, char *argv[])
 
 			ret = select(nfd, &rfds, NULL, NULL, NULL);
 			if (ret <= 0) {
-				ipcon_info("%s: select error :%s\n",
-					MYNAME,
+				ipcon_info("%s: select error :%s\n", MYNAME,
 					strerror(errno));
 				continue;
 			}
@@ -180,8 +176,7 @@ int main(int argc, char *argv[])
 
 				ret = ipcon_rcv_nonblock(user_h, &im);
 				if (ret < 0) {
-					ipcon_err("%s: Rcv %s failed: %s(%d)\n",
-						MYNAME,
+					ipcon_err("%s: Rcv %s failed: %s(%d)\n", MYNAME,
 						GRP_NAME,
 						strerror(-ret),
 						-ret);
@@ -191,14 +186,12 @@ int main(int argc, char *argv[])
 
 				if (im.type != IPCON_GROUP_MSG ||
 					strcmp(im.group, GRP_NAME))  {
-					ipcon_err("%s: Unexpected msg.\n",
-						MYNAME);
+					ipcon_err("%s: Unexpected msg.\n", MYNAME);
 					continue;
 				}
 
 				if (!strcmp(im.buf, "bye")) {
-					ipcon_info("%s: Quit...\n",
-						MYNAME);
+					ipcon_info("%s: Quit...\n", MYNAME);
 					should_quit = 1;
 					continue;
 				}
@@ -217,29 +210,27 @@ int main(int argc, char *argv[])
 			} else if (FD_ISSET(kfd, &rfds)) {
 				ret = ipcon_rcv_nonblock(kevent_h, &im);
 				if (ret < 0) {
-					ipcon_err("%s: Rcv %s failed: %s(%d)\n",
-						MYNAME,
+					ipcon_err("%s: Rcv %s failed: %s(%d)\n", MYNAME,
 						GRP_NAME,
 						strerror(-ret),
 						-ret);
 					continue;
 				}
 
-				if (strcmp(im.group, IPCON_KERNEL_GROUP)) {
-					ipcon_err("%s: Unexpected msg.\n",
-						MYNAME);
+				if (strcmp(im.group, IPCON_KERNEL_GROUP_NAME)) {
+					ipcon_err("%s: Unexpected msg.\n", MYNAME);
 					continue;
 				}
 
 				ipcon_kevent(&im);
 			} else {
-				ipcon_err("%s: why am I here ?.\n", MYNAME);
+				ipcon_err("%s: why am I here ?\n", MYNAME);
 			}
 
 		}
 
 		ipcon_leave_group(user_h, SRV_NAME, GRP_NAME);
-		ipcon_leave_group(kevent_h, IPCON_NAME, IPCON_KERNEL_GROUP);
+		ipcon_leave_group(kevent_h, IPCON_NAME, IPCON_KERNEL_GROUP_NAME);
 
 		/* Free handler */
 		ipcon_free_handler(user_h);
