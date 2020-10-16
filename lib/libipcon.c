@@ -100,7 +100,6 @@ IPCON_HANDLER ipcon_create_handler(char *peer_name)
 		int family;
 		struct nl_msg *msg = NULL;
 
-		ipcon_dbg("Peer name: %s\n", peer_name);
 
 		iph = malloc(sizeof(*iph));
 		if (!iph)
@@ -114,6 +113,8 @@ IPCON_HANDLER ipcon_create_handler(char *peer_name)
 			iph->flags |= IPH_FLG_ANON_PEER;
 			iph->name = auto_peer_name();
 		}
+
+		ipcon_dbg("Peer name: %s\n", iph->name);
 
 		if (ipcon_chan_init(iph))
 			break;
@@ -154,8 +155,6 @@ void ipcon_free_handler(IPCON_HANDLER handler)
 {
 	struct ipcon_peer_handler *iph = handler_to_iph(handler);
 
-	ipcon_dbg("enter: %s\n", __func__);
-
 	if (!iph)
 		return;
 
@@ -165,8 +164,6 @@ void ipcon_free_handler(IPCON_HANDLER handler)
 	free(iph->name);
 
 	free(iph);
-
-	ipcon_dbg("leave %s \n", __func__);
 }
 
 int ipcon_register_group(IPCON_HANDLER handler, char *name)
@@ -177,8 +174,6 @@ int ipcon_register_group(IPCON_HANDLER handler, char *name)
 	struct nlmsghdr *nlh = NULL;
 	struct nl_msg *msg = NULL;
 	struct nlattr *tb[NUM_IPCON_ATTR];
-
-	ipcon_dbg("enter: %s\n", __func__);
 
 	if (!iph || !name)
 		return -EINVAL;
@@ -203,10 +198,6 @@ int ipcon_register_group(IPCON_HANDLER handler, char *name)
 		ipcon_c_unlock(iph);
 	} while (0);
 
-	nlmsg_free(msg);
-
-
-	ipcon_dbg("leave: %s ret = %d\n", __func__, ret);
 	return ret;
 }
 
@@ -220,8 +211,6 @@ int is_peer_present(IPCON_HANDLER handler, char *name)
 	struct nl_msg *msg = NULL;
 	struct nl_msg *rmsg = NULL;
 	struct nlattr *tb[NUM_IPCON_ATTR];
-
-	ipcon_dbg("enter: %s\n", __func__);
 
 	if (!iph)
 		return -EINVAL;
@@ -246,9 +235,6 @@ int is_peer_present(IPCON_HANDLER handler, char *name)
 		ipcon_c_unlock(iph);
 
 	} while (0);
-	nlmsg_free(msg);
-
-	ipcon_dbg("leave: %s ret= %d\n", __func__, ret);
 
 	return ret == 0;
 }
@@ -265,8 +251,6 @@ static int ipcon_get_group(struct ipcon_peer_handler *iph, char *peer_name,
 	struct nl_msg *rmsg = NULL;
 
 	do {
-		ipcon_dbg("enter: %s\n", __func__);
-
 		msg = nlmsg_alloc();
 		if (!msg) {
 			ret = -ENOMEM;
@@ -294,10 +278,7 @@ static int ipcon_get_group(struct ipcon_peer_handler *iph, char *peer_name,
 		}
 	} while (0);
 
-	nlmsg_free(msg);
 	nlmsg_free(rmsg);
-
-	ipcon_dbg("leave: %s ret=%d\n", __func__, ret);
 
 	return ret;
 }
@@ -408,8 +389,6 @@ int ipcon_unregister_group(IPCON_HANDLER handler, char *name)
 		ret = ipcon_send_rcv(&iph->c_chan, msg, NULL);
 		ipcon_c_unlock(iph);
 
-		nlmsg_free(msg);
-
 	} while (0);
 
 	return ret;
@@ -461,8 +440,6 @@ int ipcon_send_unicast(IPCON_HANDLER handler, char *name,
 		ipcon_s_unlock(iph);
 
 	} while (0);
-
-	nlmsg_free(msg);
 
 	if (ipcon_data)
 		nl_data_free(ipcon_data);
@@ -521,8 +498,6 @@ int ipcon_send_multicast(IPCON_HANDLER handler, char *name, void *buf,
 		ipcon_s_unlock(iph);
 
 	} while (0);
-
-	nlmsg_free(msg);
 
 	if (ipcon_data)
 		nl_data_free(ipcon_data);
@@ -642,7 +617,6 @@ redo:
 		}
 
 		ret = ipcon_recvmsg(&iph->r_chan, &msg);
-
 		if (ret < 0)
 			break;
 
@@ -656,7 +630,7 @@ redo:
 				break;
 			}
 
-			strcpy(im->group, nla_get_string(peer_name_attr));
+			strcpy(im->peer, nla_get_string(peer_name_attr));
 
 		} else if (im->type == IPCON_MULTICAST_MSG) {
 			struct nlattr *peer_name_attr =

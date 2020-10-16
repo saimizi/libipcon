@@ -9,11 +9,16 @@
 #define IPCON_ANY_CMD	IPCON_CMD_MAX
 #define IPCON_ANY_PORT	0xFFFFFFFF
 
+struct ipconmsg_result {
+	struct nl_msg *msg;
+};
+
 struct ipcon_channel {
 	struct nl_sock *sk;
 	__u32 port;
 	pthread_mutex_t mutex;
 	struct ipcon_peer_handler *iph;
+	struct ipconmsg_result ir;
 };
 
 struct ipcon_group_info {
@@ -23,14 +28,23 @@ struct ipcon_group_info {
 	__u32 groupid;
 };
 
+enum {
+	IPH_C_CHAN = 0,
+	IPH_S_CHAN = 1,
+	IPH_R_CHAN = 2,
+	IPH_CHAN_LAST = IPH_R_CHAN
+};
+
 #define IPH_FLG_ANON_PEER		(1<<0)
+
 struct ipcon_peer_handler {
 	struct link_entry_head grp; /* Must be first */
 	char *name;
 	uint32_t flags;
-	struct ipcon_channel s_chan;
-	struct ipcon_channel c_chan;
-	struct ipcon_channel r_chan;
+#define	c_chan	chan[0]
+#define	s_chan	chan[1]
+#define	r_chan	chan[2]
+	struct ipcon_channel chan[3];
 };
 
 static inline void ipcon_c_lock(struct ipcon_peer_handler *iph)
@@ -112,14 +126,14 @@ static inline int nlerr2syserr(int nlerr)
 	return -EREMOTEIO;
 }
 
-static inline __u8 ipconmsg_cmd(struct nl_msg *msg)
+static inline __u16 ipconmsg_cmd(struct nl_msg *msg)
 {
-	((struct ipcon_msghdr *)nlmsg_data(nlmsg_hdr(msg)))->cmd;
+	return ((struct ipcon_msghdr *)nlmsg_data(nlmsg_hdr(msg)))->cmd;
 }
 
 static inline __u16 ipconmsg_version(struct nl_msg *msg)
 {
-	((struct ipcon_msghdr *)nlmsg_data(nlmsg_hdr(msg)))->version;
+	return 	((struct ipcon_msghdr *)nlmsg_data(nlmsg_hdr(msg)))->version;
 }
 
 static inline void ipconmsg_complete(struct ipcon_channel *ic,

@@ -12,6 +12,7 @@
 #include "libipcon_priv.h"
 #include "libipcon_dbg.h"
 
+static int ipcon_cb_valid(struct nl_msg *msg, void *arg);
 
 static uint32_t newport(void)
 {
@@ -29,17 +30,23 @@ static uint32_t newport(void)
 #define NLMSG_MAX_SIZE	(8192UL)
 
 static inline int ipcon_chan_init_one(struct ipcon_peer_handler *iph,
-		struct ipcon_channel *ic)
+			uint32_t chan_id)
 {
 	int ret = 0;
 	pthread_mutexattr_t mtxAttr;
 	struct sockaddr_nl local;
 	int pthread_mutex_initialized = 0;
+	struct ipcon_channel *ic = NULL;
+	struct nl_cb *cb = NULL;
 
 	do {
+		if (!iph || chan_id > IPH_CHAN_LAST) {
+			ret = -EINVAL;
+			break;
+		}
 
+		ic = &iph->chan[chan_id];
 		ic->iph = iph;
-
 		ret = pthread_mutexattr_init(&mtxAttr);
 		if (ret) {
 			ret *= -1;
@@ -66,15 +73,31 @@ static inline int ipcon_chan_init_one(struct ipcon_peer_handler *iph,
 
 		pthread_mutex_initialized = 1;
 
+		cb = nl_cb_alloc(NL_CB_CUSTOM);
+		if (!cb) {
+			ret = -ENOMEM;
+			break;
+		}
+		nl_cb_set(cb, NL_CB_VALID, NL_CB_CUSTOM, ipcon_cb_valid, &ic->ir);
 
-		ic->sk = nl_socket_alloc();
+		ic->sk = nl_socket_alloc_cb(cb);
 		if (!ic->sk) {
 			ret = -ENOMEM;
 			break;
 		}
 
-		/* Enable NLM_F_ACK by default */
-		nl_socket_enable_auto_ack(ic->sk);
+		switch (chan_id) {
+		case IPH_C_CHAN:
+		case IPH_S_CHAN:
+			nl_socket_enable_auto_ack(ic->sk);
+			break;
+		case IPH_R_CHAN:
+			nl_socket_disable_auto_ack(ic->sk);
+			nl_socket_enable_msg_peek(ic->sk);
+			break;
+		default:
+			break;
+		}
 
 		ret = nl_connect(ic->sk, NETLINK_IPCON);
 		if (ret < 0) {
@@ -86,8 +109,10 @@ static inline int ipcon_chan_init_one(struct ipcon_peer_handler *iph,
 
 	} while (0);
 
+	nl_cb_put(cb);
+
 	if (ret < 0) {
-		if (ic->sk)
+		if (ic && ic->sk)
 			nl_close(ic->sk);
 
 		if (pthread_mutex_initialized)
@@ -149,47 +174,29 @@ int ipcon_sendto(struct ipcon_channel *ic, struct nl_msg *msg)
 	return ret;
 }
 
-struct ipconmsg_result {
-	int ret;
-	struct nl_msg *msg;
-};
-
-int ipcon_cb_valid(struct nl_msg *msg, void *arg)
+static int ipcon_cb_valid(struct nl_msg *msg, void *arg)
 {
 	struct ipconmsg_result *ir = arg;
 
-	ipcon_dbg("enter: %s\n", __func__);
-
+	assert(!ir->msg);
 	nlmsg_get(msg);
 	ir->msg = msg;
 
-	ipcon_dbg("leave: %s\n", __func__);
-
-	return 0;
+	return NL_OK;
 }
 
 int ipcon_recvmsg(struct ipcon_channel *ic, struct nl_msg **msg)
 {
 	int ret = 0;
-	struct ipconmsg_result ir = {
-		.ret = 0,
-		.msg = NULL,
-	};
-	struct nl_cb *cb = nl_cb_alloc(NL_CB_CUSTOM);
 
-	ipcon_dbg("enter: %s\n", __func__);
-
-	assert(cb);
-
-	nl_cb_set(cb, NL_CB_VALID, NL_CB_CUSTOM, ipcon_cb_valid, &ir);
-	ret = nl_recvmsgs(ic->sk, cb);
+	ret = nl_recvmsgs_default(ic->sk);
 
 	if (msg)
-		*msg = ir.msg;
+		*msg = ic->ir.msg;
 	else
-		nlmsg_free(ir.msg);
+		nlmsg_free(ic->ir.msg);
 
-	ipcon_dbg("leave: %s nlerr: ret=%d\n", __func__, ret);
+	ic->ir.msg = NULL;
 
 	return ret < 0 ? nlerr2syserr(ret) : ret;
 }
@@ -199,14 +206,17 @@ int ipcon_send_rcv(struct ipcon_channel *ic, struct nl_msg *msg,
 {
 	int ret = 0;
 
-	ipcon_dbg("enter: %s\n", __func__);
-	do {
-		ret = ipcon_sendto(ic, msg);
-		if (!ret)
-			ret = ipcon_recvmsg(ic, rmsg);
-	} while (0);
+	ret = nl_send_sync(ic->sk, msg);
+	if (ret < 0)
+		return -nlerr2syserr(ret);
 
-	ipcon_dbg("leave: %s ret=%d\n", __func__, ret);
+	if (rmsg)
+		*rmsg = ic->ir.msg;
+	else 
+		nlmsg_free(ic->ir.msg);
+
+	ic->ir.msg = NULL;
+
 	return ret;
 }
 
@@ -223,15 +233,15 @@ int ipcon_chan_init(struct ipcon_peer_handler *iph)
 			break;
 		}
 
-		ret = ipcon_chan_init_one(iph, &iph->c_chan);
+		ret = ipcon_chan_init_one(iph, IPH_C_CHAN);
 		if (ret < 0)
 			break;
 
-		ret = ipcon_chan_init_one(iph, &iph->s_chan);
+		ret = ipcon_chan_init_one(iph, IPH_S_CHAN);
 		if (ret < 0)
 			break;
 
-		ret = ipcon_chan_init_one(iph, &iph->r_chan);
+		ret = ipcon_chan_init_one(iph, IPH_R_CHAN);
 		if (ret < 0)
 			break;
 
@@ -254,7 +264,6 @@ int ipcon_chan_init(struct ipcon_peer_handler *iph)
 		ipconmsg_complete(&iph->c_chan, msg);
 
 		ret = ipcon_send_rcv(&iph->c_chan, msg, NULL);
-		nlmsg_free(msg);
 
 	} while (0);
 
