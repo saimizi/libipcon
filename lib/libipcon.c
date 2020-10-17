@@ -119,13 +119,6 @@ IPCON_HANDLER ipcon_create_handler(char *peer_name)
 		if (ipcon_chan_init(iph))
 			break;
 
-		ipcon_dbg("Ctrl port: %lu.\n",
-				(unsigned long)iph->c_chan.port);
-		ipcon_dbg("Send port: %lu.\n",
-				(unsigned long)iph->s_chan.port);
-		ipcon_dbg("Receive port: %lu.\n",
-				(unsigned long)iph->r_chan.port);
-
 		lh_init(&iph->grp);
 
 		ret = 0;
@@ -189,8 +182,7 @@ int ipcon_register_group(IPCON_HANDLER handler, char *name)
 		}
 
 		ipcon_c_lock(iph);
-		ipconmsg_put(msg, &iph->c_chan, IPCON_TYPE_CTL, 0,
-				IPCON_GRP_REG);
+		ipconmsg_put(msg, &iph->c_chan, IPCON_GRP_REG, 0);
 		nla_put_string(msg, IPCON_ATTR_GROUP_NAME, name);
 		ipconmsg_complete(&iph->c_chan, msg);
 
@@ -227,8 +219,7 @@ int is_peer_present(IPCON_HANDLER handler, char *name)
 		}
 
 		ipcon_c_lock(iph);
-		ipconmsg_put(msg, &iph->c_chan, IPCON_TYPE_CTL,
-				0, IPCON_PEER_RESLOVE);
+		ipconmsg_put(msg, &iph->c_chan, IPCON_PEER_RESLOVE, 0);
 		nla_put_string(msg, IPCON_ATTR_PEER_NAME, name);
 
 		ret = ipcon_send_rcv(&iph->c_chan, msg, NULL);
@@ -257,8 +248,9 @@ static int ipcon_get_group(struct ipcon_peer_handler *iph, char *peer_name,
 			break;
 		}
 
-		ipconmsg_put(msg, &iph->c_chan, IPCON_TYPE_CTL,
-				0, IPCON_GRP_RESLOVE);
+ipcon_dbg("Enter %s: peer_name: %s group_name: %s\n", iph->name, peer_name, group_name);
+
+		ipconmsg_put(msg, &iph->c_chan,IPCON_GRP_RESLOVE,0);
 		nla_put_string(msg, IPCON_ATTR_PEER_NAME, peer_name);
 		nla_put_string(msg, IPCON_ATTR_GROUP_NAME, group_name);
 		ipconmsg_complete(&iph->c_chan, msg);
@@ -280,6 +272,7 @@ static int ipcon_get_group(struct ipcon_peer_handler *iph, char *peer_name,
 
 	nlmsg_free(rmsg);
 
+ipcon_dbg("Leave%s: peer_name: %s group_name: %s groupid; %u\n", iph->name, peer_name, group_name, groupid ? *groupid : 0xFFFFFFFF);
 	return ret;
 }
 
@@ -381,8 +374,7 @@ int ipcon_unregister_group(IPCON_HANDLER handler, char *name)
 		}
 
 		ipcon_c_lock(iph);
-		ipconmsg_put(msg, &iph->c_chan, IPCON_TYPE_CTL,
-				0, IPCON_GRP_UNREG);
+		ipconmsg_put(msg, &iph->c_chan, IPCON_GRP_UNREG,0);
 		nla_put_string(msg, IPCON_ATTR_GROUP_NAME, name);
 		ipconmsg_complete(&iph->c_chan, msg);
 
@@ -423,9 +415,7 @@ int ipcon_send_unicast(IPCON_HANDLER handler, char *name,
 		}
 
 		ipcon_s_lock(iph);
-		ipconmsg_put(msg, &iph->s_chan, IPCON_TYPE_MSG,
-				0, IPCON_USR_MSG);
-
+		ipconmsg_put(msg, &iph->s_chan, IPCON_USR_MSG,0);
 		nla_put_string(msg, IPCON_ATTR_PEER_NAME, name);
 		ipcon_data = nl_data_alloc(buf, size);
 		if (!ipcon_data) {
@@ -478,9 +468,7 @@ int ipcon_send_multicast(IPCON_HANDLER handler, char *name, void *buf,
 		}
 
 		ipcon_s_lock(iph);
-		ipconmsg_put(msg, &iph->s_chan, IPCON_TYPE_MSG,
-				0, IPCON_MULTICAST_MSG);
-
+		ipconmsg_put(msg, &iph->s_chan, IPCON_MULTICAST_MSG,0);
 		nla_put_string(msg, IPCON_ATTR_GROUP_NAME, name);
 		if (sync)
 			nla_put_u32(msg, IPCON_ATTR_FLAG,
@@ -620,7 +608,7 @@ redo:
 		if (ret < 0)
 			break;
 
-		im->type = (__u32)ipconmsg_cmd(msg);
+		im->type = (__u32)ipconmsg_type(msg);
 		if (im->type == IPCON_USR_MSG) {
 			struct nlattr *peer_name_attr =
 				ipcon_find_attr(msg, IPCON_ATTR_PEER_NAME);

@@ -13,6 +13,7 @@
 #include "libipcon_dbg.h"
 
 static int ipcon_cb_valid(struct nl_msg *msg, void *arg);
+static int ipcon_cb_ack(struct nl_msg *msg, void *arg);
 
 static uint32_t newport(void)
 {
@@ -45,6 +46,7 @@ static inline int ipcon_chan_init_one(struct ipcon_peer_handler *iph,
 			break;
 		}
 
+
 		ic = &iph->chan[chan_id];
 		ic->iph = iph;
 		ret = pthread_mutexattr_init(&mtxAttr);
@@ -73,12 +75,30 @@ static inline int ipcon_chan_init_one(struct ipcon_peer_handler *iph,
 
 		pthread_mutex_initialized = 1;
 
+		switch (chan_id) {
+		case IPH_C_CHAN:
+		case IPH_S_CHAN:
+			ic->flags |= IC_FLG_AUTO_ACK;
+			break;
+		case IPH_R_CHAN:
+			ic->flags |= IC_FLG_PEEK;
+			break;
+		default:
+			break;
+		}
+
 		cb = nl_cb_alloc(NL_CB_CUSTOM);
 		if (!cb) {
 			ret = -ENOMEM;
 			break;
 		}
+
 		nl_cb_set(cb, NL_CB_VALID, NL_CB_CUSTOM, ipcon_cb_valid, &ic->ir);
+
+		if (ic->flags & IC_FLG_AUTO_ACK)
+			nl_cb_set(cb, NL_CB_ACK, NL_CB_CUSTOM,
+					ipcon_cb_ack, &ic->ir);
+
 
 		ic->sk = nl_socket_alloc_cb(cb);
 		if (!ic->sk) {
@@ -86,18 +106,15 @@ static inline int ipcon_chan_init_one(struct ipcon_peer_handler *iph,
 			break;
 		}
 
-		switch (chan_id) {
-		case IPH_C_CHAN:
-		case IPH_S_CHAN:
+		if (ic->flags & IC_FLG_AUTO_ACK)
 			nl_socket_enable_auto_ack(ic->sk);
-			break;
-		case IPH_R_CHAN:
+		else
 			nl_socket_disable_auto_ack(ic->sk);
+
+		if (ic->flags & IC_FLG_PEEK)
 			nl_socket_enable_msg_peek(ic->sk);
-			break;
-		default:
-			break;
-		}
+		else
+			nl_socket_disable_msg_peek(ic->sk);
 
 		ret = nl_connect(ic->sk, NETLINK_IPCON);
 		if (ret < 0) {
@@ -124,20 +141,10 @@ static inline int ipcon_chan_init_one(struct ipcon_peer_handler *iph,
 }
 
 void *ipconmsg_put(struct nl_msg *msg, struct ipcon_channel *ic,
-		enum ipcon_msg_type type, int flags, __u8 cmd)
+		enum ipcon_msg_type type, int flags)
 {
-	struct nlmsghdr *nlh;
-	struct ipcon_msghdr *hdr = NULL;
-
-	nlh = nlmsg_put(msg, NL_AUTO_PORT, NL_AUTO_SEQ, type,
+	return nlmsg_put(msg, NL_AUTO_PORT, NL_AUTO_SEQ, type,
 			IPCONMSG_HDRLEN, flags | NLM_F_REQUEST);
-	if (nlh) {
-		hdr =  nlmsg_data(nlh);
-		hdr->cmd = cmd;
-		hdr->version = 1;
-	}
-
-	return hdr;
 };
 
 
@@ -182,13 +189,28 @@ static int ipcon_cb_valid(struct nl_msg *msg, void *arg)
 	nlmsg_get(msg);
 	ir->msg = msg;
 
+	//nl_msg_dump(ir->msg, stderr);
+
 	return NL_OK;
+}
+
+static int ipcon_cb_ack(struct nl_msg *msg, void *arg)
+{
+	struct ipconmsg_result *ir = arg;
+
+	assert(ir);
+ipcon_dbg("ir->flags :%lx\n", ir->flags);
+	ir->flags |= IR_FLG_ACK_OK;
+ipcon_dbg("ir->flags :%lx\n", ir->flags);
+
+	return NL_STOP;
 }
 
 int ipcon_recvmsg(struct ipcon_channel *ic, struct nl_msg **msg)
 {
 	int ret = 0;
 
+	ipcon_dbg("Enter %s\n", __func__);
 	ret = nl_recvmsgs_default(ic->sk);
 
 	if (msg)
@@ -196,8 +218,9 @@ int ipcon_recvmsg(struct ipcon_channel *ic, struct nl_msg **msg)
 	else
 		nlmsg_free(ic->ir.msg);
 
-	ic->ir.msg = NULL;
+	memset(&ic->ir, 0, sizeof(ic->ir));
 
+	ipcon_dbg("Leave %s ret = %d\n", __func__, ret);
 	return ret < 0 ? nlerr2syserr(ret) : ret;
 }
 
@@ -206,17 +229,36 @@ int ipcon_send_rcv(struct ipcon_channel *ic, struct nl_msg *msg,
 {
 	int ret = 0;
 
-	ret = nl_send_sync(ic->sk, msg);
+	ipcon_dbg("Enter %s flag: %lx\n", __func__, ic->ir.flags);
+
+	ret = ipcon_sendto(ic, msg);
 	if (ret < 0)
-		return -nlerr2syserr(ret);
+		return nlerr2syserr(ret);
+
+redo:
+	ret = nl_recvmsgs_default(ic->sk);
+	if (ret < 0)
+		return nlerr2syserr(ret);
+
+	if (ic->flags & IC_FLG_AUTO_ACK)  {
+		ipcon_dbg("Need ACK\n");
+
+		if ((ic->ir.flags & IR_FLG_ACK_OK) == 0) {
+			ipcon_dbg("wait ACK\n");
+			goto redo;
+		} else {
+			ipcon_dbg("got ACK\n");
+		}
+	}
 
 	if (rmsg)
 		*rmsg = ic->ir.msg;
 	else 
 		nlmsg_free(ic->ir.msg);
 
-	ic->ir.msg = NULL;
+	memset(&ic->ir, 0, sizeof(ic->ir));
 
+	ipcon_dbg("Leave %s ret = %d\n", __func__, ret);
 	return ret;
 }
 
@@ -245,6 +287,15 @@ int ipcon_chan_init(struct ipcon_peer_handler *iph)
 		if (ret < 0)
 			break;
 
+		ipcon_dbg("Name: %s.\n", iph->name);
+		ipcon_dbg("Flags: %lx.\n", iph->flags);
+		ipcon_dbg("Ctrl port: %lu.\n",
+				(unsigned long)iph->c_chan.port);
+		ipcon_dbg("Send port: %lu.\n",
+				(unsigned long)iph->s_chan.port);
+		ipcon_dbg("Receive port: %lu.\n",
+				(unsigned long)iph->r_chan.port);
+
 		msg = nlmsg_alloc();
 		if (!msg) {
 			ret = -ENOMEM;
@@ -252,14 +303,15 @@ int ipcon_chan_init(struct ipcon_peer_handler *iph)
 		}
 
 		/* Register the peer */
-		ipconmsg_put(msg, &iph->c_chan, IPCON_TYPE_CTL,
-				0, IPCON_PEER_REG);
+		ipconmsg_put(msg, &iph->c_chan, IPCON_PEER_REG, 0);
 
 		nla_put_string(msg, IPCON_ATTR_PEER_NAME, iph->name);
 		nla_put_u32(msg, IPCON_ATTR_SPORT, iph->s_chan.port);
 		nla_put_u32(msg, IPCON_ATTR_RPORT, iph->r_chan.port);
-		if (iph->flags | IPH_FLG_ANON_PEER)
+		if (iph->flags & IPH_FLG_ANON_PEER) {
+			ipcon_dbg("IPH_FLG_ANON_PEER is ON.\n");
 			nla_put_u32(msg, IPCON_ATTR_FLAG, IPCON_FLG_ANON_PEER);
+		}
 
 		ipconmsg_complete(&iph->c_chan, msg);
 

@@ -93,14 +93,14 @@ int main(int argc, char *argv[])
 	do {
 
 		ret = ipcon_join_group(handler, IPCON_NAME,
-				IPCON_KERNEL_GROUP);
+				IPCON_KERNEL_GROUP_NAME);
 		if (ret < 0)
 			ipcon_err("Failed to get %s group :%s(%d).\n",
-					IPCON_KERNEL_GROUP,
+					IPCON_KERNEL_GROUP_NAME,
 					strerror(-ret),
 					-ret);
 		else
-			ipcon_info("Joined %s group.\n", IPCON_KERNEL_GROUP);
+			ipcon_info("Joined %s group.\n", IPCON_KERNEL_GROUP_NAME);
 
 		if (is_peer_present(handler, SRV_NAME) > 0) {
 			ipcon_info("Detected service %s.\n", SRV_NAME);
@@ -183,7 +183,7 @@ redo:
 
 				} else if (im.type == IPCON_GROUP_MSG) {
 					if (!strcmp(im.group,
-						IPCON_KERNEL_GROUP))
+						IPCON_KERNEL_GROUP_NAME))
 						ipcon_kevent(&im);
 
 					/*
