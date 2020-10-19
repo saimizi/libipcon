@@ -18,6 +18,48 @@
 #include "libipcon_dbg.h"
 #include "libipcon_priv.h"
 
+static inline void default_normal_msg_cb(char *peer_name, void *buf,
+			size_t len, void *data)
+{
+}
+
+static inline void default_group_msg_cb(char *peer_name, char *group_name,
+			void *buf, size_t len, void *data)
+{
+}
+
+static inline void  default_peer_add(char *peer_name, void *data)
+{
+}
+
+static inline void default_peer_remove(char *peer_name, void *data)
+{
+}
+
+static inline void  default_group_add(char *peer_name, char *group_name,
+			void *data)
+{
+}
+
+static inline void default_group_remove(char *peer_name, char *group_name,
+			void *data)
+{
+}
+
+static inline void default_auto_group_join(char *peer_name,
+			char *group_name, void *data)
+{
+}
+
+static inline void default_auto_group_leave(char *peer_name,
+			char *group_name, void *data)
+{
+}
+
+static inline void  default_rcv_msg_error(int error, void *data)
+{
+}
+
 void __attribute__ ((constructor)) libipcon_init(void)
 {
 	libipcon_dbg_init();
@@ -213,7 +255,6 @@ int is_peer_present(IPCON_HANDLER handler, char *name)
 	if (!valid_name(name))
 		return -EINVAL;
 
-
 	do {
 		msg = nlmsg_alloc();
 		if (!msg) {
@@ -251,9 +292,7 @@ static int ipcon_get_group(struct ipcon_peer_handler *iph, char *peer_name,
 			break;
 		}
 
-ipcon_dbg("Enter %s: peer_name: %s group_name: %s\n", iph->name, peer_name, group_name);
-
-		ipconmsg_put(msg, &iph->c_chan,IPCON_GRP_RESLOVE,0);
+		ipconmsg_put(msg, &iph->c_chan, IPCON_GRP_RESLOVE, 0);
 		nla_put_string(msg, IPCON_ATTR_PEER_NAME, peer_name);
 		nla_put_string(msg, IPCON_ATTR_GROUP_NAME, group_name);
 		ipconmsg_complete(&iph->c_chan, msg);
@@ -275,7 +314,6 @@ ipcon_dbg("Enter %s: peer_name: %s group_name: %s\n", iph->name, peer_name, grou
 
 	nlmsg_free(rmsg);
 
-ipcon_dbg("Leave%s: peer_name: %s group_name: %s groupid; %u\n", iph->name, peer_name, group_name, groupid ? *groupid : 0xFFFFFFFF);
 	return ret;
 }
 
@@ -300,9 +338,9 @@ int is_group_present(IPCON_HANDLER handler, char *peer_name, char *group_name)
  * Suscribe an existed multicast group.
  * If a group has not been created, return as error.
  */
-int ipcon_join_group(IPCON_HANDLER handler, char *peer_name, char *group_name)
+int ipcon_join_group_internal(struct ipcon_peer_handler *iph,
+		char *peer_name, char *group_name)
 {
-	struct ipcon_peer_handler *iph = handler_to_iph(handler);
 	int ret = 0;
 	__u32 groupid = 0;
 
@@ -354,6 +392,13 @@ int ipcon_join_group(IPCON_HANDLER handler, char *peer_name, char *group_name)
 	return ret;
 }
 
+int ipcon_join_group(IPCON_HANDLER handler, char *peer_name, char *group_name)
+{
+	struct ipcon_peer_handler *iph = handler_to_iph(handler);
+
+	return ipcon_join_group_internal(iph, peer_name, group_name);
+}
+
 int ipcon_unregister_group(IPCON_HANDLER handler, char *name)
 {
 	int ret = 0;
@@ -377,7 +422,7 @@ int ipcon_unregister_group(IPCON_HANDLER handler, char *name)
 		}
 
 		ipcon_c_lock(iph);
-		ipconmsg_put(msg, &iph->c_chan, IPCON_GRP_UNREG,0);
+		ipconmsg_put(msg, &iph->c_chan, IPCON_GRP_UNREG, 0);
 		nla_put_string(msg, IPCON_ATTR_GROUP_NAME, name);
 		ipconmsg_complete(&iph->c_chan, msg);
 
@@ -418,7 +463,7 @@ int ipcon_send_unicast(IPCON_HANDLER handler, char *name,
 		}
 
 		ipcon_s_lock(iph);
-		ipconmsg_put(msg, &iph->s_chan, IPCON_USR_MSG,0);
+		ipconmsg_put(msg, &iph->s_chan, IPCON_USR_MSG, 0);
 		nla_put_string(msg, IPCON_ATTR_PEER_NAME, name);
 		ipcon_data = nl_data_alloc(buf, size);
 		if (!ipcon_data) {
@@ -471,7 +516,7 @@ int ipcon_send_multicast(IPCON_HANDLER handler, char *name, void *buf,
 		}
 
 		ipcon_s_lock(iph);
-		ipconmsg_put(msg, &iph->s_chan, IPCON_MULTICAST_MSG,0);
+		ipconmsg_put(msg, &iph->s_chan, IPCON_MULTICAST_MSG, 0);
 		nla_put_string(msg, IPCON_ATTR_GROUP_NAME, name);
 		if (sync)
 			nla_put_u32(msg, IPCON_ATTR_FLAG,
@@ -569,15 +614,11 @@ int ipcon_get_ctrl_fd(IPCON_HANDLER handler)
 }
 
 
-int ipcon_rcv_timeout(IPCON_HANDLER handler, struct ipcon_msg *im,
-		struct timeval *timeout)
+int ipcon_rcv_timeout_internal(struct ipcon_peer_handler *iph,
+		struct ipcon_msg *im, struct timeval *timeout)
 {
 	int ret = 0;
-	struct ipcon_peer_handler *iph = handler_to_iph(handler);
 	struct nl_msg *msg = NULL;
-
-	if (!iph || !im)
-		return -EINVAL;
 
 	ipcon_r_lock(iph);
 	do {
@@ -677,6 +718,20 @@ redo:
 	return ret;
 }
 
+int ipcon_rcv_timeout(IPCON_HANDLER handler, struct ipcon_msg *im,
+		struct timeval *timeout)
+{
+	struct ipcon_peer_handler *iph = handler_to_iph(handler);
+
+	if (!iph || !im)
+		return -EINVAL;
+
+	if (iph->flags & IPH_FLG_ASYNC_IO)
+		return -EBUSY;
+
+	return ipcon_rcv_timeout_internal(iph, im, timeout);
+}
+
 /*
  * ipcon_rcv
  *
@@ -694,17 +749,33 @@ redo:
 
 int ipcon_rcv(IPCON_HANDLER handler, struct ipcon_msg *im)
 {
-	return ipcon_rcv_timeout(handler, im, NULL);
+
+	struct ipcon_peer_handler *iph = handler_to_iph(handler);
+
+	if (!iph || !im)
+		return -EINVAL;
+
+	if (iph->flags & IPH_FLG_ASYNC_IO)
+		return -EBUSY;
+
+	return ipcon_rcv_timeout_internal(iph, im, NULL);
 }
 
 int ipcon_rcv_nonblock(IPCON_HANDLER handler, struct ipcon_msg *im)
 {
+	struct ipcon_peer_handler *iph = handler_to_iph(handler);
 	struct timeval timeout;
 
 	timeout.tv_sec = 0;
 	timeout.tv_usec = 0;
 
-	return ipcon_rcv_timeout(handler, im, &timeout);
+	if (!iph || !im)
+		return -EINVAL;
+
+	if (iph->flags & IPH_FLG_ASYNC_IO)
+		return -EBUSY;
+
+	return ipcon_rcv_timeout_internal(handler, im, &timeout);
 }
 
 const char *ipcon_selfname(IPCON_HANDLER handler)
@@ -714,3 +785,312 @@ const char *ipcon_selfname(IPCON_HANDLER handler)
 	return (const char *)iph->name;
 }
 
+static int async_normal_msg(struct ipcon_peer_handler *iph,
+		struct ipcon_msg *im)
+{
+	int ret = 0;
+
+	do {
+		int i;
+		struct async_rcv_ctl *arc = iph->arc;
+
+		arc->cb.normal_msg_cb(im->peer,
+				im->buf,
+				im->len,
+				arc->cb.data);
+
+	} while (0);
+
+	return ret;
+}
+
+static int async_group_msg(struct ipcon_peer_handler *iph, struct ipcon_msg *im)
+{
+	int ret = 0;
+
+	do {
+		int i;
+		struct async_rcv_ctl *arc = iph->arc;
+
+		arc->cb.group_msg_cb(im->peer, im->group,
+				im->buf, im->len, arc->cb.data);
+	} while (0);
+
+	return ret;
+}
+
+static inline int in_auto_group(struct async_rcv_ctl *arc,
+		struct libipcon_kevent *ik)
+{
+	int ret = 0;
+
+	do {
+		int i;
+		char *peer = ik->group.peer_name;
+		char *group = ik->group.name;
+
+		for (i = 0; i < arc->num; i++) {
+			char *agi_peer = arc->agi[i].peer_name;
+			char *agi_group = arc->agi[i].group_name;
+
+			if (strcmp(peer, agi_peer))
+				continue;
+
+			if (strcmp(group, agi_group))
+				continue;
+
+			ret = 1;
+			break;
+		}
+	} while (0);
+
+	return ret;
+}
+
+static int async_kevent_msg(struct ipcon_peer_handler *iph,
+		struct ipcon_msg *im)
+{
+	int ret = 0;
+
+	do {
+		struct async_rcv_ctl *arc = iph->arc;
+		struct libipcon_kevent *ik =  (struct libipcon_kevent *)im->buf;
+		int i;
+
+		switch (ik->type) {
+		case LIBIPCON_EVENT_PEER_ADD:
+			arc->cb.peer_add(ik->peer.name, arc->cb.data);
+			break;
+		case LIBIPCON_EVENT_PEER_REMOVE:
+			arc->cb.peer_remove(ik->peer.name, arc->cb.data);
+			break;
+		case LIBIPCON_EVENT_GRP_ADD:
+			if (in_auto_group(arc, ik))
+				break;
+			arc->cb.group_add(ik->group.peer_name,
+					ik->group.name,
+					arc->cb.data);
+			break;
+		case LIBIPCON_EVENT_GRP_REMOVE:
+			if (in_auto_group(arc, ik))
+				break;
+			arc->cb.group_remove(ik->group.peer_name,
+					ik->group.name,
+					arc->cb.data);
+			break;
+		default:
+			break;
+		}
+
+	} while (0);
+
+	return ret;
+}
+
+static inline void auto_group(struct ipcon_peer_handler *iph,
+			struct ipcon_msg *im)
+{
+	int ret = 0;
+	struct libipcon_kevent *ik =  (struct libipcon_kevent *)im->buf;
+	struct async_rcv_ctl *arc = iph->arc;
+	int i;
+
+	do {
+		if (ik->type != LIBIPCON_EVENT_GRP_ADD &&
+			ik->type != LIBIPCON_EVENT_GRP_REMOVE)
+			break;
+
+		if (!in_auto_group(arc, ik))
+			break;
+
+		if (ik->type == LIBIPCON_EVENT_GRP_ADD) {
+			ret = ipcon_join_group_internal(iph,
+					ik->group.peer_name,
+					ik->group.name);
+
+			if (!ret)
+				arc->cb.auto_group_join(
+					ik->group.peer_name,
+					ik->group.name,
+					arc->cb.data);
+			break;
+		}
+
+		if (ik->type == LIBIPCON_EVENT_GRP_REMOVE) {
+			arc->cb.auto_group_leave(
+				ik->group.peer_name,
+				ik->group.name,
+				arc->cb.data);
+			break;
+		}
+
+	} while (0);
+}
+
+
+static void *ipcon_async_rcv_thread(void *para)
+{
+	struct ipcon_peer_handler *iph = para;
+
+	int ret = 0;
+	struct async_rcv_ctl *arc = iph->arc;
+	int i;
+
+	IPCON_HANDLER iph_local_handler = ipcon_create_handler(NULL, 0);
+	struct ipcon_peer_handler *iph_local = handler_to_iph(iph_local_handler);
+
+	assert(iph);
+	assert(iph_local);
+
+	ret = ipcon_join_group_internal(iph_local, LIBIPCON_KERNEL_NAME,
+			LIBIPCON_KERNEL_GROUP_NAME);
+
+	assert(ret == 0);
+
+	for (i = 0; i < arc->num; i++) {
+		/*
+		 * This will register related groups kevent for
+		 * iph_local_handler
+		 */
+		if (!is_group_present(iph_local_handler,
+				arc->agi[i].peer_name,
+				arc->agi[i].group_name))
+			continue;
+
+		if (!ipcon_join_group_internal(iph,
+				arc->agi[i].peer_name,
+				arc->agi[i].group_name))
+			arc->cb.auto_group_join(
+				arc->agi[i].peer_name,
+				arc->agi[i].group_name,
+				arc->cb.data);
+	}
+
+
+	while (iph->flags & IPH_FLG_ASYNC_IO) {
+		struct ipcon_msg im;
+		fd_set	rfds;
+		int iph_fd = ipcon_get_read_fd(iph);
+		int iph_local_fd = ipcon_get_read_fd(iph_local);
+		int nfd = (iph_fd > iph_local_fd) ? iph_fd + 1 : iph_local_fd + 1;
+		struct timeval timeout;
+
+		timeout.tv_sec = 0;
+		timeout.tv_usec = 0;
+
+		FD_ZERO(&rfds);
+		FD_SET(iph_fd, &rfds);
+		FD_SET(iph_local_fd, &rfds);
+
+		/*select() is the cancel point*/
+		ret = select(nfd, &rfds, NULL, NULL, NULL);
+		if (ret < 0) {
+			if (errno == EINTR)
+				continue;
+		}
+
+		if (FD_ISSET(iph_local_fd, &rfds)) {
+			ret = ipcon_rcv_timeout_internal(iph_local,
+					&im, &timeout);
+
+			if (ret < 0)
+				arc->cb.rcv_msg_error(ret, arc->cb.data);
+			else if (im.type == LIBIPCON_KEVENT_MSG)
+				auto_group(iph, &im);
+		}
+
+		if (FD_ISSET(iph_fd, &rfds)) {
+			ret = ipcon_rcv_timeout_internal(iph, &im, &timeout);
+
+			if (ret < 0)
+				arc->cb.rcv_msg_error(ret, arc->cb.data);
+			else if (im.type == LIBIPCON_NORMAL_MSG)
+				async_normal_msg(iph, &im);
+			else if (im.type == LIBIPCON_GROUP_MSG)
+				async_group_msg(iph, &im);
+			else if (im.type == LIBIPCON_KEVENT_MSG)
+				async_kevent_msg(iph, &im);
+		}
+	}
+
+	ipcon_free_handler(iph_local_handler);
+
+	return NULL;
+}
+
+int ipcon_async_rcv(IPCON_HANDLER handler, struct async_rcv_ctl *arc)
+{
+	int ret = 0;
+	struct ipcon_peer_handler *iph = handler_to_iph(handler);
+
+	do {
+		int i;
+		struct async_cb_ctl *cb;
+
+		if (!iph || !arc) {
+			ret = -EINVAL;
+			break;
+		}
+
+		if (iph->flags & IPH_FLG_ASYNC_IO) {
+			ret = -EBUSY;
+			break;
+		}
+
+		iph->flags |= IPH_FLG_ASYNC_IO;
+		iph->arc = arc;
+
+		cb = &arc->cb;
+
+		if (!cb->normal_msg_cb)
+			cb->normal_msg_cb	= default_normal_msg_cb;
+		if (!cb->group_msg_cb)
+			cb->group_msg_cb	= default_group_msg_cb;
+		if (!cb->peer_add)
+			cb->peer_add		= default_peer_add;
+		if (!cb->peer_remove)
+			cb->peer_remove		= default_peer_remove;
+		if (!cb->group_add)
+			cb->group_add		= default_group_add;
+		if (!cb->group_remove)
+			cb->group_remove	= default_group_remove;
+		if (!cb->auto_group_join)
+			cb->auto_group_join	= default_auto_group_join;
+		if (!cb->auto_group_leave)
+			cb->auto_group_leave	= default_auto_group_leave;
+		if (!cb->rcv_msg_error)
+			cb->rcv_msg_error	= default_rcv_msg_error;
+
+		ret = pthread_create(&iph->async_rcv_thread_id,
+				NULL, ipcon_async_rcv_thread, (void *)iph);
+		if (ret < 0) {
+			iph->arc = NULL;
+			iph->async_rcv_thread_id = 0;
+			iph->flags &= ~IPH_FLG_ASYNC_IO;
+			break;
+		}
+
+		ret = pthread_join(iph->async_rcv_thread_id, NULL);
+
+		iph->async_rcv_thread_id = 0;
+		iph->flags &= ~IPH_FLG_ASYNC_IO;
+
+	} while (0);
+
+	return ret;
+}
+
+void ipcon_async_rcv_stop(IPCON_HANDLER handler)
+{
+	struct ipcon_peer_handler *iph = handler_to_iph(handler);
+
+	do {
+		assert(iph);
+
+		if (!(iph->flags & IPH_FLG_ASYNC_IO))
+			break;
+
+		pthread_cancel(iph->async_rcv_thread_id);
+
+	} while (0);
+}

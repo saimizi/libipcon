@@ -24,57 +24,67 @@
 
 #define SRV_NAME	"ipcon_server"
 #define PEER_NAME	"ipcon_sender"
-int should_send_msg;
 
-static void ipcon_kevent(struct ipcon_msg *im)
+
+static inline int ipcon_sender_send_msg(IPCON_HANDLER handler)
 {
-	struct libipcon_kevent *ik;
+	int ret;
+	struct ts_msg tm;
 
-	if (!im)
-		return;
+redo:
+	tsm_init(&tm);
+	tsm_recod("SEN", &tm);
+	ret = ipcon_send_unicast(handler, SRV_NAME, &tm, sizeof(tm));
+	if (ret == -EAGAIN) {
+		usleep(100000);
+		goto redo;
+	}
 
-	ik = &im->kevent;
+	return ret;
 
-	switch (ik->type) {
-	case LIBIPCON_EVENT_PEER_ADD:
-		if (!strcmp(ik->peer.name, SRV_NAME)) {
-			should_send_msg = 1;
-			ipcon_info("Detected peer %s created.\n", SRV_NAME);
+}
+
+static void  ipcon_sender_peer_add(char *peer_name, void *data)
+{
+	int ret;
+
+	IPCON_HANDLER	handler = data;
+
+	ipcon_info("Detected service %s.\n", SRV_NAME);
+	if (!strcmp(peer_name, SRV_NAME)) {
+		ret = ipcon_sender_send_msg(handler);
+		if (ret < 0) {
+			ipcon_info("Failed to send msg to %s: %s(%d).\n",
+					SRV_NAME, strerror(-ret), -ret);
+			ipcon_async_rcv_stop(handler);
 		}
-		break;
-	case LIBIPCON_EVENT_PEER_REMOVE:
-		if (!strcmp(ik->peer.name, SRV_NAME)) {
-			should_send_msg = 0;
-			ipcon_info("Detected service %s removed.\n", SRV_NAME);
-		}
-		break;
-	case LIBIPCON_EVENT_GRP_ADD:
-		ipcon_info("Detected group %s.%s added.\n",
-				ik->group.peer_name,
-				ik->group.name);
-		break;
-	case LIBIPCON_EVENT_GRP_REMOVE:
-		ipcon_info("Detected group %s.%s removed.\n",
-				ik->group.peer_name,
-				ik->group.name);
-		break;
-	default:
-
-		break;
 	}
 }
 
-static int normal_msg_handler(struct ipcon_msg *im)
+static void  ipcon_sender_peer_remove(char *peer_name, void *data)
 {
-	if (strcmp(im->peer, SRV_NAME)) {
-		ipcon_warn("Ignore msg from %s\n", im->peer);
-		return -1;
+	ipcon_info("Detected service %s removed.\n", SRV_NAME);
+}
+
+static void ipcon_sender_normal_msg(char *peer_name, void *buf,
+			size_t len, void *data)
+{
+	IPCON_HANDLER	handler = data;
+	int ret;
+
+	if (strcmp(peer_name, SRV_NAME))
+		return;
+
+	if (strcmp(buf, "OK")) {
+		ipcon_async_rcv_stop(handler);
+		return;
 	}
 
-	if (strcmp(im->buf, "OK"))
-		return 1;
+	sleep(1);
 
-	return 0;
+	ret = ipcon_sender_send_msg(handler);
+	if ((ret < 0) && (ret != -ENOENT))
+		ipcon_async_rcv_stop(handler);
 }
 
 int main(int argc, char *argv[])
@@ -82,7 +92,15 @@ int main(int argc, char *argv[])
 
 	int ret = 0;
 	IPCON_HANDLER	handler;
-	int should_quit = 0;
+	struct async_rcv_ctl arc = {
+		.agi = NULL,
+		.num = 0,
+		.cb = {
+			.peer_add	= ipcon_sender_peer_add,
+			.peer_remove	= ipcon_sender_peer_remove,
+			.normal_msg_cb	= ipcon_sender_normal_msg,
+		}
+	};
 
 	handler = ipcon_create_handler(NULL, 0);
 	if (!handler) {
@@ -105,100 +123,11 @@ int main(int argc, char *argv[])
 
 		if (is_peer_present(handler, SRV_NAME) > 0) {
 			ipcon_info("Detected service %s.\n", SRV_NAME);
-			should_send_msg = 1;
+			ret = ipcon_sender_send_msg(handler);
 		}
 
-		while (!should_quit) {
-			struct ipcon_msg im;
-			int skip_sleep = 0;
-
-			if (should_send_msg) {
-				struct ts_msg tm;
-
-redo:
-				tsm_init(&tm);
-				tsm_recod("SEN", &tm);
-				ret = ipcon_send_unicast(handler,
-						SRV_NAME,
-						&tm,
-						sizeof(tm));
-
-				if (ret == -EAGAIN) {
-					usleep(100000);
-					goto redo;
-				}
-
-				if (ret < 0 && ret != -ESRCH) {
-					/*
-					 * if fail on the reason other than the
-					 * exit of server, just exit ...
-					 */
-					ipcon_err("Send msg error: %s(%d), quit\n.",
-						strerror(-ret), -ret);
-
-					should_quit = 1;
-					continue;
-				}
-
-				should_send_msg = 0;
-			}
-
-			do {
-				ret = ipcon_rcv(handler, &im);
-				if (ret < 0) {
-					struct logger_msg lm;
-
-					ipcon_err("Rcv mesg failed: %s(%d).\n",
-						strerror(-ret), -ret);
-
-
-					sprintf(lm.msg,
-						"receive msg error: %s(%d),quit\n",
-						strerror(-ret), -ret);
-					ipcon_send_unicast(handler,
-							LOGGER_PEER_NAME,
-							&lm, sizeof(lm));
-
-					should_quit = 1;
-					skip_sleep = 1;
-					break;
-				}
-
-				if (im.type == LIBIPCON_NORMAL_MSG) {
-
-					ret = normal_msg_handler(&im);
-
-					/* unexpected message */
-					if (ret == -1)
-						continue;
-
-					/* server asked quit */
-					if (ret == 1) {
-						should_quit = 1;
-						skip_sleep = 1;
-					}
-
-					should_send_msg = 1;
-					break;
-
-
-				} else if (im.type == LIBIPCON_KEVENT_MSG) {
-					ipcon_kevent(&im);
-
-					/*
-					 * if server peer detected, should send
-					 * msg...
-					 */
-					if (should_send_msg) {
-						skip_sleep = 1;
-						break;
-					}
-				}
-			} while (1);
-
-			if (!skip_sleep)
-				sleep(1);
-		}
+		arc.cb.data = handler;
+		ret = ipcon_async_rcv(handler, &arc);
 
 	} while (0);
 

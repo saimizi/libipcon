@@ -17,6 +17,8 @@ VER_0 {
 		ipcon_rcv;
 		ipcon_rcv_nonblock;
 		ipcon_rcv_timeout;
+		ipcon_async_rcv;
+		ipcon_async_rcv_stop;
 		ipcon_selfname;
 	local:
 		*;

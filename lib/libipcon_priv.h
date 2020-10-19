@@ -5,6 +5,7 @@
 #include "libipcon.h"
 #include <linux/netlink.h>
 #include <netlink/msg.h>
+#include <pthread.h>
 #include "util.h"
 
 #define IPCON_ANY_CMD	IPCON_CMD_MAX
@@ -43,6 +44,7 @@ enum {
 
 #define IPH_FLG_ANON_PEER		(1UL << 0)
 #define IPH_FLG_DISABLE_KEVENT_FILTER	(1UL << 1)
+#define IPH_FLG_ASYNC_IO		(1UL << 2)
 struct ipcon_peer_handler {
 	struct link_entry_head grp; /* Must be first */
 	char *name;
@@ -51,6 +53,8 @@ struct ipcon_peer_handler {
 #define	s_chan	chan[1]
 #define	r_chan	chan[2]
 	struct ipcon_channel chan[3];
+	pthread_t	async_rcv_thread_id;
+	struct async_rcv_ctl *arc;
 };
 
 static inline void ipcon_c_lock(struct ipcon_peer_handler *iph)

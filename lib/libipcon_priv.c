@@ -93,7 +93,10 @@ static inline int ipcon_chan_init_one(struct ipcon_peer_handler *iph,
 			break;
 		}
 
-		nl_cb_set(cb, NL_CB_VALID, NL_CB_CUSTOM, ipcon_cb_valid, &ic->ir);
+		nl_cb_set(cb,
+			NL_CB_VALID, NL_CB_CUSTOM,
+			ipcon_cb_valid,
+			&ic->ir);
 
 		if (ic->flags & IC_FLG_AUTO_ACK)
 			nl_cb_set(cb, NL_CB_ACK, NL_CB_CUSTOM,
@@ -199,9 +202,7 @@ static int ipcon_cb_ack(struct nl_msg *msg, void *arg)
 	struct ipconmsg_result *ir = arg;
 
 	assert(ir);
-ipcon_dbg("ir->flags :%lx\n", ir->flags);
 	ir->flags |= IR_FLG_ACK_OK;
-ipcon_dbg("ir->flags :%lx\n", ir->flags);
 
 	return NL_STOP;
 }
@@ -253,7 +254,7 @@ redo:
 
 	if (rmsg)
 		*rmsg = ic->ir.msg;
-	else 
+	else
 		nlmsg_free(ic->ir.msg);
 
 	memset(&ic->ir, 0, sizeof(ic->ir));
