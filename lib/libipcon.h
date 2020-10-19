@@ -2,26 +2,58 @@
 #define __LIBIPCON_H__
 
 #include <string.h>
-#include "ipcon.h"
-
 
 #define IPCON_HANDLER	void *
 
-#define IPCON_MAX_USR_GROUP	5
-
-#define IPCON_NORMAL_MSG	IPCON_USR_MSG
-#define IPCON_GROUP_MSG		IPCON_MULTICAST_MSG
-
-
-struct ipcon_msg {
-	__u32 type;
-	char group[IPCON_MAX_NAME_LEN];
-	char peer[IPCON_MAX_NAME_LEN];
-	char buf[MAX_IPCONMSG_DATA_SIZE];
-	__u32 len;
+enum libipcon_msg_type {
+	LIBIPCON_NORMAL_MSG,
+	LIBIPCON_GROUP_MSG,
+	LIBIPCON_KEVENT_MSG,
+	LIBIPCON_INVALID_MSG,
 };
 
-IPCON_HANDLER ipcon_create_handler(char *peer_name);
+
+#define LIBIPCON_KERNEL_NAME		"ipcon"
+#define LIBIPCON_KERNEL_GROUP_NAME	"ipcon_kevent"
+#define LIBIPCON_MAX_PAYLOAD_LEN	2048
+#define LIBIPCON_MAX_NAME_LEN		32
+#define LIBIPCON_MAX_USR_GROUP		5
+
+#define LIBIPCON_FLG_DISABLE_KEVENT_FILTER	(1UL << 0)
+
+
+enum libipcon_kevent_type {
+	LIBIPCON_EVENT_PEER_ADD,
+	LIBIPCON_EVENT_PEER_REMOVE,
+	LIBIPCON_EVENT_GRP_ADD,
+	LIBIPCON_EVENT_GRP_REMOVE,
+};
+
+struct libipcon_kevent{
+	enum libipcon_kevent_type type;
+	union {
+		struct {
+			char name[LIBIPCON_MAX_NAME_LEN];
+			char peer_name[LIBIPCON_MAX_NAME_LEN];
+		} group;
+		struct {
+			char name[LIBIPCON_MAX_NAME_LEN];
+		} peer;
+	};
+};
+
+struct ipcon_msg {
+	enum libipcon_msg_type type;
+	char group[LIBIPCON_MAX_NAME_LEN];
+	char peer[LIBIPCON_MAX_NAME_LEN];
+	__u32 len;
+	union {
+		char buf[LIBIPCON_MAX_PAYLOAD_LEN];
+		struct libipcon_kevent kevent;
+	};
+};
+
+IPCON_HANDLER ipcon_create_handler(char *peer_name, unsigned long flags);
 void ipcon_free_handler(IPCON_HANDLER handler);
 int is_peer_present(IPCON_HANDLER handler, char *name);
 int is_group_present(IPCON_HANDLER handler, char *peer_name, char *group_name);

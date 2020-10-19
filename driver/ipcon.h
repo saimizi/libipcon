@@ -9,7 +9,6 @@
 #define NETLINK_IPCON		29
 
 #define IPCON_NAME		"ipcon"
-#define IPCON_KERNEL_GROUP	0
 #define IPCON_KERNEL_GROUP_NAME	"ipcon_kevent"
 #define IPCON_MAX_NAME_LEN	32
 #define IPCON_MAX_GROUP		128
@@ -36,6 +35,7 @@ enum ipcon_msg_type {
 
 #define IPCON_FLG_ANON_PEER		(1 << 0)
 #define IPCON_FLG_MULTICAST_SYNC	(1 << 1)
+#define IPCON_FLG_DISABL_KEVENT_FILTER	(1 << 2)
 
 enum {
 	IPCON_ATTR_UNSPEC,

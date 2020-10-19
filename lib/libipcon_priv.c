@@ -313,6 +313,12 @@ int ipcon_chan_init(struct ipcon_peer_handler *iph)
 			nla_put_u32(msg, IPCON_ATTR_FLAG, IPCON_FLG_ANON_PEER);
 		}
 
+		if (iph->flags & IPH_FLG_DISABLE_KEVENT_FILTER) {
+			ipcon_dbg("IPH_FLG_DISABLE_KEVENT_FILTER is ON.\n");
+			nla_put_u32(msg, IPCON_ATTR_FLAG,
+				IPCON_FLG_DISABL_KEVENT_FILTER);
+		}
+
 		ipconmsg_complete(&iph->c_chan, msg);
 
 		ret = ipcon_send_rcv(&iph->c_chan, msg, NULL);

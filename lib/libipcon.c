@@ -89,7 +89,7 @@ static char *auto_peer_name()
  * Create and return a ipcon handler with an internal structure ipcon_mng_info.
  */
 
-IPCON_HANDLER ipcon_create_handler(char *peer_name)
+IPCON_HANDLER ipcon_create_handler(char *peer_name, unsigned long flags)
 {
 	struct ipcon_peer_handler *iph = NULL;
 	int gi = 0;
@@ -113,6 +113,9 @@ IPCON_HANDLER ipcon_create_handler(char *peer_name)
 			iph->flags |= IPH_FLG_ANON_PEER;
 			iph->name = auto_peer_name();
 		}
+
+		if (flags & LIBIPCON_FLG_DISABLE_KEVENT_FILTER)
+			iph->flags |= IPH_FLG_DISABLE_KEVENT_FILTER;
 
 		ipcon_dbg("Peer name: %s\n", iph->name);
 
@@ -608,8 +611,12 @@ redo:
 		if (ret < 0)
 			break;
 
-		im->type = (__u32)ipconmsg_type(msg);
-		if (im->type == IPCON_USR_MSG) {
+		struct nlattr *peer_name_attr;
+		struct nlattr *group_name_attr;
+
+		switch (ipconmsg_type(msg)) {
+		case IPCON_USR_MSG:
+			im->type = LIBIPCON_NORMAL_MSG;
 			struct nlattr *peer_name_attr =
 				ipcon_find_attr(msg, IPCON_ATTR_PEER_NAME);
 
@@ -619,38 +626,49 @@ redo:
 			}
 
 			strcpy(im->peer, nla_get_string(peer_name_attr));
+			break;
+		case IPCON_MULTICAST_MSG:
+			peer_name_attr = ipcon_find_attr(msg,
+					IPCON_ATTR_PEER_NAME);
 
-		} else if (im->type == IPCON_MULTICAST_MSG) {
-			struct nlattr *peer_name_attr =
-				ipcon_find_attr(msg, IPCON_ATTR_PEER_NAME);
-
-			struct nlattr *group_name_attr =
-				ipcon_find_attr(msg, IPCON_ATTR_GROUP_NAME);
+			group_name_attr = ipcon_find_attr(msg,
+					IPCON_ATTR_GROUP_NAME);
 
 			if (!peer_name_attr || !group_name_attr) {
 				ret = -EREMOTEIO;
 				break;
 			}
 
+			if (!strcmp(IPCON_KERNEL_GROUP_NAME,
+					nla_get_string(group_name_attr)))
+				im->type = LIBIPCON_KEVENT_MSG;
+			else
+				im->type = LIBIPCON_GROUP_MSG;
+
 			strcpy(im->peer, nla_get_string(peer_name_attr));
 			strcpy(im->group, nla_get_string(group_name_attr));
-		} else {
-			ret = -EREMOTEIO;
+			break;
+		default:
+			im->type = LIBIPCON_INVALID_MSG;
+			break;
+
 		}
 
-		{
-			struct nlattr *data_attr = ipcon_find_attr(msg,
+		if (im->type == LIBIPCON_INVALID_MSG) {
+			ret = -EREMOTEIO;
+			break;
+		}
+
+		struct nlattr *data_attr = ipcon_find_attr(msg,
 					IPCON_ATTR_DATA);
 
-			if (!data_attr) {
-				ret = -EREMOTEIO;
-				break;
-			}
-
-			im->len = (__u32) nla_len(data_attr);
-			memcpy((void *)im->buf, nla_data(data_attr),
-				(size_t)im->len);
+		if (!data_attr) {
+			ret = -EREMOTEIO;
+			break;
 		}
+
+		im->len = (__u32) nla_len(data_attr);
+		memcpy((void *)im->buf, nla_data(data_attr), (size_t)im->len);
 
 	} while (0);
 	ipcon_r_unlock(iph);
@@ -695,3 +713,4 @@ const char *ipcon_selfname(IPCON_HANDLER handler)
 
 	return (const char *)iph->name;
 }
+

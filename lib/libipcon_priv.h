@@ -1,6 +1,7 @@
 #ifndef __LIBIPCON_PRIV_H__
 #define __LIBIPCON_PRIV_H__
 
+#include "ipcon.h"
 #include "libipcon.h"
 #include <linux/netlink.h>
 #include <netlink/msg.h>
@@ -41,6 +42,7 @@ enum {
 };
 
 #define IPH_FLG_ANON_PEER		(1UL << 0)
+#define IPH_FLG_DISABLE_KEVENT_FILTER	(1UL << 1)
 struct ipcon_peer_handler {
 	struct link_entry_head grp; /* Must be first */
 	char *name;
