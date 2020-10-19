@@ -36,7 +36,7 @@ int main(int argc, char *argv[])
 		return 1;
 	}
 
-	handler = ipcon_create_handler(NULL);
+	handler = ipcon_create_handler(NULL, 0);
 	if (!handler) {
 		ipcon_err("Failed to create handler\n");
 		return 1;

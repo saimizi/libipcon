@@ -34,15 +34,15 @@ IPCON_HANDLER user_h;
 static void ipcon_kevent(struct ipcon_msg *im)
 {
 	int ret = 0;
-	struct ipcon_kevent *ik;
+	struct libipcon_kevent *ik;
 
 	if (!im)
 		return;
 
-	ik = (struct ipcon_kevent *)im->buf;
+	ik = &im->kevent;
 
 	switch (ik->type) {
-	case IPCON_EVENT_GRP_ADD:
+	case LIBIPCON_EVENT_GRP_ADD:
 		if (srv_group_connected)
 			break;
 
@@ -64,7 +64,7 @@ static void ipcon_kevent(struct ipcon_msg *im)
 		}
 		break;
 
-	case IPCON_EVENT_GRP_REMOVE:
+	case LIBIPCON_EVENT_GRP_REMOVE:
 		if (!srv_group_connected)
 			break;
 
@@ -88,7 +88,7 @@ static void ipcon_kevent(struct ipcon_msg *im)
 		}
 		break;
 
-	case IPCON_EVENT_PEER_REMOVE:
+	case LIBIPCON_EVENT_PEER_REMOVE:
 		ipcon_err("%s: peer %s is remove\n",
 			MYNAME,
 			ik->peer.name);
@@ -107,23 +107,23 @@ int main(int argc, char *argv[])
 
 	do {
 		/* Create server handler */
-		kevent_h = ipcon_create_handler(NULL);
+		kevent_h = ipcon_create_handler(NULL, 0);
 		if (!kevent_h) {
 			ipcon_err("Failed to create libipcon handler.\n");
 			break;
 		}
 
-		user_h = ipcon_create_handler(NULL);
+		user_h = ipcon_create_handler(NULL, 0);
 		if (!user_h) {
 			ipcon_err("Failed to create libipcon handler.\n");
 			break;
 		}
 
-		ret = ipcon_join_group(kevent_h, IPCON_NAME,
-				IPCON_KERNEL_GROUP_NAME);
+		ret = ipcon_join_group(kevent_h, LIBIPCON_KERNEL_NAME,
+				LIBIPCON_KERNEL_GROUP_NAME);
 		if (ret < 0) {
 			ipcon_err("%s: Failed to join %s :%s(%d).\n", MYNAME,
-					IPCON_KERNEL_GROUP_NAME,
+					LIBIPCON_KERNEL_GROUP_NAME,
 					strerror(-ret),
 					-ret);
 			ret = 1;
@@ -131,7 +131,7 @@ int main(int argc, char *argv[])
 		}
 
 		ipcon_info("%s: Joined %s group.\n", MYNAME,
-				IPCON_KERNEL_GROUP_NAME);
+				LIBIPCON_KERNEL_GROUP_NAME);
 
 		/*
 		 * is_group_present() takes the following roles:
@@ -184,7 +184,7 @@ int main(int argc, char *argv[])
 					continue;
 				}
 
-				if (im.type != IPCON_GROUP_MSG ||
+				if (im.type != LIBIPCON_GROUP_MSG ||
 					strcmp(im.group, GRP_NAME))  {
 					ipcon_err("%s: Unexpected msg.\n", MYNAME);
 					continue;
@@ -217,7 +217,7 @@ int main(int argc, char *argv[])
 					continue;
 				}
 
-				if (strcmp(im.group, IPCON_KERNEL_GROUP_NAME)) {
+				if (im.type != LIBIPCON_KEVENT_MSG) {
 					ipcon_err("%s: Unexpected msg.\n", MYNAME);
 					continue;
 				}
@@ -230,7 +230,8 @@ int main(int argc, char *argv[])
 		}
 
 		ipcon_leave_group(user_h, SRV_NAME, GRP_NAME);
-		ipcon_leave_group(kevent_h, IPCON_NAME, IPCON_KERNEL_GROUP_NAME);
+		ipcon_leave_group(kevent_h, LIBIPCON_KERNEL_NAME,
+				LIBIPCON_KERNEL_GROUP_NAME);
 
 		/* Free handler */
 		ipcon_free_handler(user_h);

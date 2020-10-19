@@ -57,7 +57,7 @@ int main(int argc, char *argv[])
 
 	setvbuf(logfile, NULL, _IONBF, 0);
 
-	handler = ipcon_create_handler(LOGGER_PEER_NAME);
+	handler = ipcon_create_handler(LOGGER_PEER_NAME, 0);
 	if (!handler) {
 		fclose(logfile);
 		ipcon_err("Failed to create handler\n");
@@ -75,7 +75,7 @@ int main(int argc, char *argv[])
 			continue;
 		}
 
-		if (im.type == IPCON_NORMAL_MSG)
+		if (im.type == LIBIPCON_NORMAL_MSG)
 			normal_msg_handler(handler, &im);
 	}
 

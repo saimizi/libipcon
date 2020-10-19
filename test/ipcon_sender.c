@@ -28,32 +28,32 @@ int should_send_msg;
 
 static void ipcon_kevent(struct ipcon_msg *im)
 {
-	struct ipcon_kevent *ik;
+	struct libipcon_kevent *ik;
 
 	if (!im)
 		return;
 
-	ik = (struct ipcon_kevent *)im->buf;
+	ik = &im->kevent;
 
 	switch (ik->type) {
-	case IPCON_EVENT_PEER_ADD:
+	case LIBIPCON_EVENT_PEER_ADD:
 		if (!strcmp(ik->peer.name, SRV_NAME)) {
 			should_send_msg = 1;
 			ipcon_info("Detected peer %s created.\n", SRV_NAME);
 		}
 		break;
-	case IPCON_EVENT_PEER_REMOVE:
+	case LIBIPCON_EVENT_PEER_REMOVE:
 		if (!strcmp(ik->peer.name, SRV_NAME)) {
 			should_send_msg = 0;
 			ipcon_info("Detected service %s removed.\n", SRV_NAME);
 		}
 		break;
-	case IPCON_EVENT_GRP_ADD:
+	case LIBIPCON_EVENT_GRP_ADD:
 		ipcon_info("Detected group %s.%s added.\n",
 				ik->group.peer_name,
 				ik->group.name);
 		break;
-	case IPCON_EVENT_GRP_REMOVE:
+	case LIBIPCON_EVENT_GRP_REMOVE:
 		ipcon_info("Detected group %s.%s removed.\n",
 				ik->group.peer_name,
 				ik->group.name);
@@ -84,7 +84,7 @@ int main(int argc, char *argv[])
 	IPCON_HANDLER	handler;
 	int should_quit = 0;
 
-	handler = ipcon_create_handler(NULL);
+	handler = ipcon_create_handler(NULL, 0);
 	if (!handler) {
 		ipcon_err("Failed to create handler\n");
 		return 1;
@@ -92,15 +92,16 @@ int main(int argc, char *argv[])
 
 	do {
 
-		ret = ipcon_join_group(handler, IPCON_NAME,
-				IPCON_KERNEL_GROUP_NAME);
+		ret = ipcon_join_group(handler, LIBIPCON_KERNEL_NAME,
+				LIBIPCON_KERNEL_GROUP_NAME);
 		if (ret < 0)
 			ipcon_err("Failed to get %s group :%s(%d).\n",
-					IPCON_KERNEL_GROUP_NAME,
+					LIBIPCON_KERNEL_GROUP_NAME,
 					strerror(-ret),
 					-ret);
 		else
-			ipcon_info("Joined %s group.\n", IPCON_KERNEL_GROUP_NAME);
+			ipcon_info("Joined %s group.\n",
+					LIBIPCON_KERNEL_GROUP_NAME);
 
 		if (is_peer_present(handler, SRV_NAME) > 0) {
 			ipcon_info("Detected service %s.\n", SRV_NAME);
@@ -163,7 +164,7 @@ redo:
 					break;
 				}
 
-				if (im.type == IPCON_NORMAL_MSG) {
+				if (im.type == LIBIPCON_NORMAL_MSG) {
 
 					ret = normal_msg_handler(&im);
 
@@ -181,10 +182,8 @@ redo:
 					break;
 
 
-				} else if (im.type == IPCON_GROUP_MSG) {
-					if (!strcmp(im.group,
-						IPCON_KERNEL_GROUP_NAME))
-						ipcon_kevent(&im);
+				} else if (im.type == LIBIPCON_KEVENT_MSG) {
+					ipcon_kevent(&im);
 
 					/*
 					 * if server peer detected, should send

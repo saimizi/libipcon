@@ -22,45 +22,45 @@ IPCON_HANDLER kevent_h;
 
 static void ipcon_kevent(struct ipcon_msg *im)
 {
-	struct ipcon_kevent *ik;
+	struct libipcon_kevent *ik;
 
 	if (!im)
 		return;
 
-	ik = (struct ipcon_kevent *)im->buf;
+	ik = &im->kevent;
 
 	struct timeval tv;
 
 	gettimeofday(&tv, NULL);
 
 	switch (ik->type) {
-	case IPCON_EVENT_GRP_ADD:
+	case LIBIPCON_EVENT_GRP_ADD:
 		ipcon_info("%15lu.%06lu\t%-32s %-32s %-32s\n",
 				tv.tv_sec, tv.tv_usec,
-				"IPCON_EVENT_GRP_ADD",
+				"LIBIPCON_EVENT_GRP_ADD",
 				ik->group.peer_name,
 				ik->group.name);
 		break;
 
-	case IPCON_EVENT_GRP_REMOVE:
+	case LIBIPCON_EVENT_GRP_REMOVE:
 		ipcon_info("%15lu.%06lu\t%-32s %-32s %-32s\n",
 				tv.tv_sec, tv.tv_usec,
-				"IPCON_EVENT_GRP_REMOVE",
+				"LIBIPCON_EVENT_GRP_REMOVE",
 				ik->group.peer_name,
 				ik->group.name);
 		break;
 
-	case IPCON_EVENT_PEER_ADD:
+	case LIBIPCON_EVENT_PEER_ADD:
 		ipcon_info("%15lu.%06lu\t%-32s %-32s\n",
 				tv.tv_sec, tv.tv_usec,
-				"IPCON_EVENT_PEER_ADD",
+				"LIBIPCON_EVENT_PEER_ADD",
 				ik->peer.name);
 		break;
 
-	case IPCON_EVENT_PEER_REMOVE:
+	case LIBIPCON_EVENT_PEER_REMOVE:
 		ipcon_info("%15lu.%06lu\t%-32s %-32s\n",
 				tv.tv_sec, tv.tv_usec,
-				"IPCON_EVENT_PEER_REMOVE",
+				"LIBIPCON_EVENT_PEER_REMOVE",
 				ik->peer.name);
 		break;
 	default:
@@ -77,11 +77,13 @@ int main(int argc, char *argv[])
 
 	do {
 		/* Create server handler */
-		kevent_h = ipcon_create_handler(NULL);
+		kevent_h = ipcon_create_handler(NULL,
+				LIBIPCON_FLG_DISABLE_KEVENT_FILTER);
 		assert(kevent_h);
 			
-		ret = ipcon_join_group(kevent_h, IPCON_NAME,
-				IPCON_KERNEL_GROUP_NAME);
+		ret = ipcon_join_group(kevent_h,
+				LIBIPCON_KERNEL_NAME,
+				LIBIPCON_KERNEL_GROUP_NAME);
 		assert(ret == 0);
 
 		while (!should_quit) {
@@ -101,13 +103,16 @@ int main(int argc, char *argv[])
 				ret = ipcon_rcv_nonblock(kevent_h, &im);
 				assert(ret == 0);
 
-				if (strcmp(im.group, IPCON_KERNEL_GROUP_NAME))
+				if (im.type != LIBIPCON_KEVENT_MSG)
 					continue;
 
 				ipcon_kevent(&im);
 			}
 		}
-		ipcon_leave_group(kevent_h, IPCON_NAME, IPCON_KERNEL_GROUP_NAME);
+		ipcon_leave_group(kevent_h,
+				LIBIPCON_KERNEL_NAME,
+				LIBIPCON_KERNEL_GROUP_NAME);
+
 		/* Free handler */
 		ipcon_free_handler(kevent_h);
 

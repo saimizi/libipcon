@@ -65,50 +65,49 @@ void * group_sender(void *para)
 		while (ge = LIST_POP(&local_event_queue,
 				struct gs_event, node, it)) {
 
-			if (ge->msg.type == IPCON_NORMAL_MSG) {
-				ipcon_info("IPCON_MSG_UNICAST \n");
+			if (ge->msg.type == LIBIPCON_NORMAL_MSG) {
+				ipcon_info("LIBIPCON_NORMAL_MSG\n");
 				sprintf(gs_buf, "%s : %s\n", ge->msg.peer, ge->msg.buf);
-			} else {
-				ipcon_info("IPCON_GROUP_MSG : %s\n", ge->msg.group);
+			} else if (ge->msg.type == LIBIPCON_KEVENT_MSG) {
+				ipcon_info("LIBIPCON_KEVENT_MSG\n");
 
-				if (strcmp(ge->msg.group, IPCON_KERNEL_GROUP_NAME)) {
-					free(ge);
-					continue;
-				}
-
-				struct ipcon_kevent * ik;
-				ik = (struct ipcon_kevent *)ge->msg.buf;
+				struct libipcon_kevent * ik;
+				ik = &ge->msg.kevent;
 
 				switch (ik->type) {
-				case IPCON_EVENT_PEER_ADD:
+				case LIBIPCON_EVENT_PEER_ADD:
 					sprintf(gs_buf, "%s : peer %s added\n",
-						IPCON_KERNEL_GROUP_NAME,
+						LIBIPCON_KERNEL_GROUP_NAME,
 						ik->peer.name);
 					break;
 
-				case IPCON_EVENT_PEER_REMOVE:
+				case LIBIPCON_EVENT_PEER_REMOVE:
 					sprintf(gs_buf, "%s : peer %s removed\n",
-						IPCON_KERNEL_GROUP_NAME,
+						LIBIPCON_KERNEL_GROUP_NAME,
 						ik->peer.name);
 					break;
 
-				case IPCON_EVENT_GRP_ADD:
+				case LIBIPCON_EVENT_GRP_ADD:
 					sprintf(gs_buf, "%s : group %s of peer %s added\n",
-						IPCON_KERNEL_GROUP_NAME,
+						LIBIPCON_KERNEL_GROUP_NAME,
 						ik->group.name,
 						ik->group.peer_name);
 					break;
 
-				case IPCON_EVENT_GRP_REMOVE:
+				case LIBIPCON_EVENT_GRP_REMOVE:
 					sprintf(gs_buf, "%s : group %s of peer %s removed\n",
-						IPCON_KERNEL_GROUP_NAME,
+						LIBIPCON_KERNEL_GROUP_NAME,
 						ik->group.name,
 						ik->group.peer_name);
 					break;
 
 				default:
+					sprintf(gs_buf, "%s : %s\n", ge->msg.peer, ge->msg.buf);
 					break;
 				}
+			} else {
+				free(ge);
+				continue;
 			}
 
 			ipcon_info("%s\n", gs_buf);
@@ -132,29 +131,31 @@ int main(int argc, char *argv[])
 	IPCON_HANDLER	handler;
 	int should_quit = 0;
 
-	handler = ipcon_create_handler(PEER_NAME);
+	handler = ipcon_create_handler(PEER_NAME,
+			LIBIPCON_FLG_DISABLE_KEVENT_FILTER);
 	if (!handler) {
 		ipcon_err("Failed to create handler\n");
 		return 1;
 	}
 
-	gs_buf = malloc(IPCON_MAX_NAME_LEN + MAX_IPCONMSG_DATA_SIZE + 16);
+	gs_buf = malloc(LIBIPCON_MAX_NAME_LEN + LIBIPCON_MAX_PAYLOAD_LEN + 16);
 	if (!gs_buf)
 		return 1;
 
 	do {
-		ret = ipcon_join_group(handler, IPCON_NAME,
-				IPCON_KERNEL_GROUP_NAME);
+		ret = ipcon_join_group(handler, LIBIPCON_KERNEL_NAME,
+				LIBIPCON_KERNEL_GROUP_NAME);
 		if (ret < 0) {
 			ipcon_err("Failed to join %s group :%s(%d).\n",
-					IPCON_KERNEL_GROUP_NAME,
+					LIBIPCON_KERNEL_GROUP_NAME,
 					strerror(-ret),
 					-ret);
 			ret = 1;
 			break;
 		}
 
-		ipcon_info("Joined %s group.\n", IPCON_KERNEL_GROUP_NAME);
+		ipcon_info("Joined %s group.\n",
+				LIBIPCON_KERNEL_GROUP_NAME);
 		ret = ipcon_register_group(handler, GRP_NAME);
 		if (ret < 0) {
 			ipcon_err("Failed to register group: %s (%d)\n",

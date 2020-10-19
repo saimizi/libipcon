@@ -74,7 +74,7 @@ int main(int argc, char *argv[])
 	IPCON_HANDLER	handler;
 	int should_quit = 0;
 
-	handler = ipcon_create_handler(PEER_NAME);
+	handler = ipcon_create_handler(PEER_NAME, 0);
 	if (!handler) {
 		ipcon_err("Failed to create handler\n");
 		return 1;
@@ -115,7 +115,7 @@ int main(int argc, char *argv[])
 
 			}
 
-			if (im.type == IPCON_NORMAL_MSG)  {
+			if (im.type == LIBIPCON_NORMAL_MSG)  {
 				struct ts_msg *tm = NULL;
 
 				assert(strcmp(im.peer, PEER_NAME));
