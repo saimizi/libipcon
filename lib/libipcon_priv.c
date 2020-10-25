@@ -152,7 +152,7 @@ void *ipconmsg_put(struct nl_msg *msg, struct ipcon_channel *ic,
 
 
 int ipcon_parse(struct nl_msg *msg, struct nlattr *tb[], int maxtype,
-		const struct nla_policy *policy)
+		struct nla_policy *policy)
 {
 	return nlmsg_parse(nlmsg_hdr(msg), IPCONMSG_HDRLEN, tb,
 			maxtype, policy);

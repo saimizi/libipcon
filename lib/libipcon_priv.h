@@ -156,7 +156,7 @@ int ipcon_recvmsg(struct ipcon_channel *ic, struct nl_msg **msg);
 int ipcon_send_rcv(struct ipcon_channel *ic, struct nl_msg *msg,
 			struct nl_msg **rmsg);
 int ipcon_parse(struct nl_msg *msg, struct nlattr *tb[], int maxtype,
-		const struct nla_policy *policy);
+		struct nla_policy *policy);
 struct nlattr *ipcon_find_attr(struct nl_msg *msg,  int attrtype);
 
 
