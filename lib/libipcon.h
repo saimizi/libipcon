@@ -1,6 +1,7 @@
 #ifndef __LIBIPCON_H__
 #define __LIBIPCON_H__
 
+#include <linux/types.h>
 #include <string.h>
 
 #define IPCON_HANDLER	void *
