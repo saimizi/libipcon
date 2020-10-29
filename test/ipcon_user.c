@@ -36,7 +36,6 @@ void ipcon_user_grp_cb(char *peer_name, char *group_name,
 
 	struct ts_msg *tm = NULL;
 	char logbuf[TSLOG_BUF_SIZE];
-	struct ipcon_msg im;
 
 	if (!strcmp(buf, "bye")) {
 		ipcon_async_rcv_stop(user_h);
@@ -67,16 +66,17 @@ static void ipcon_user_grp_leave(char *peer_name,
 int main(int argc, char *argv[])
 {
 	int ret = 0;
-	struct auto_group_info agi[] = {
+	struct peer_group_info pgi[] = {
 			{
-				.peer_name = SRV_NAME,
-				.group_name = GRP_NAME,
+				.peer_name	= SRV_NAME,
+				.group_name	= GRP_NAME,
+				.auto_join	= 1,
 			},
 	};
 
 	struct async_rcv_ctl arc = {
-		.agi = agi,
-		.num = ARRAY_SIZE(agi),
+		.pgi = pgi,
+		.num = ARRAY_SIZE(pgi),
 		.cb = {
 			.group_msg_cb		= ipcon_user_grp_cb,
 			.auto_group_join	= ipcon_user_grp_join,

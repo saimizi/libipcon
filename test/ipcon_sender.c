@@ -87,14 +87,21 @@ static void ipcon_sender_normal_msg(char *peer_name, void *buf,
 		ipcon_async_rcv_stop(handler);
 }
 
+#define ARRAY_SIZE(a)	(sizeof(a)/sizeof(a[0]))
 int main(int argc, char *argv[])
 {
 
 	int ret = 0;
 	IPCON_HANDLER	handler;
+	struct peer_group_info pgi[] = {
+		{
+			.peer_name	= SRV_NAME,
+		}
+	};
+
 	struct async_rcv_ctl arc = {
-		.agi = NULL,
-		.num = 0,
+		.pgi = pgi,
+		.num = ARRAY_SIZE(pgi),
 		.cb = {
 			.peer_add	= ipcon_sender_peer_add,
 			.peer_remove	= ipcon_sender_peer_remove,
@@ -108,28 +115,8 @@ int main(int argc, char *argv[])
 		return 1;
 	}
 
-	do {
-
-		ret = ipcon_join_group(handler, LIBIPCON_KERNEL_NAME,
-				LIBIPCON_KERNEL_GROUP_NAME);
-		if (ret < 0)
-			ipcon_err("Failed to get %s group :%s(%d).\n",
-					LIBIPCON_KERNEL_GROUP_NAME,
-					strerror(-ret),
-					-ret);
-		else
-			ipcon_info("Joined %s group.\n",
-					LIBIPCON_KERNEL_GROUP_NAME);
-
-		if (is_peer_present(handler, SRV_NAME) > 0) {
-			ipcon_info("Detected service %s.\n", SRV_NAME);
-			ret = ipcon_sender_send_msg(handler);
-		}
-
-		arc.cb.data = handler;
-		ret = ipcon_async_rcv(handler, &arc);
-
-	} while (0);
+	arc.cb.data = handler;
+	ret = ipcon_async_rcv(handler, &arc);
 
 	ipcon_free_handler(handler);
 

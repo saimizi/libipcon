@@ -53,9 +53,10 @@ struct ipcon_msg {
 	};
 };
 
-struct auto_group_info {
+struct peer_group_info {
 	char *peer_name;
 	char *group_name;
+	int auto_join;
 };
 
 
@@ -76,7 +77,7 @@ struct async_cb_ctl {
 };
 
 struct async_rcv_ctl {
-	struct auto_group_info *agi;
+	struct peer_group_info *pgi;
 	int num;
 	struct async_cb_ctl cb;
 };

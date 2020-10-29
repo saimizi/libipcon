@@ -819,32 +819,57 @@ static int async_group_msg(struct ipcon_peer_handler *iph, struct ipcon_msg *im)
 	return ret;
 }
 
-static inline int in_auto_group(struct async_rcv_ctl *arc,
+static inline struct peer_group_info *search_peer_group(struct async_rcv_ctl *arc,
 		struct libipcon_kevent *ik)
 {
-	int ret = 0;
+	struct peer_group_info *pgi = NULL;
 
 	do {
 		int i;
-		char *peer = ik->group.peer_name;
-		char *group = ik->group.name;
+		char *peer;
+		char *group;
 
+		dump_kevent(ik);
 		for (i = 0; i < arc->num; i++) {
-			char *agi_peer = arc->agi[i].peer_name;
-			char *agi_group = arc->agi[i].group_name;
+			char *pgi_peer = arc->pgi[i].peer_name;
+			char *pgi_group = arc->pgi[i].group_name;
 
-			if (strcmp(peer, agi_peer))
+			if ((ik->type == LIBIPCON_EVENT_PEER_ADD) ||
+				(ik->type == LIBIPCON_EVENT_PEER_REMOVE)) {
+				peer = ik->peer.name;
+
+				if (strcmp(peer, pgi_peer))
+					continue;
+
+				if (!pgi_group) {
+					pgi = &arc->pgi[i];
+					break;
+				}
+
 				continue;
+			} 
 
-			if (strcmp(group, agi_group))
-				continue;
+			if ((ik->type == LIBIPCON_EVENT_GRP_ADD) ||
+				(ik->type == LIBIPCON_EVENT_GRP_REMOVE)) {
+				peer = ik->group.peer_name;
+				group= ik->group.name;
 
-			ret = 1;
-			break;
+				if (strcmp(peer, pgi_peer))
+					continue;
+
+				if (!pgi_group)
+					continue;
+
+				if (strcmp(group, pgi_group))
+					continue;
+
+				pgi = &arc->pgi[i];
+				break;
+			}
 		}
 	} while (0);
 
-	return ret;
+	return pgi;
 }
 
 static int async_kevent_msg(struct ipcon_peer_handler *iph,
@@ -857,6 +882,9 @@ static int async_kevent_msg(struct ipcon_peer_handler *iph,
 		struct libipcon_kevent *ik =  (struct libipcon_kevent *)im->buf;
 		int i;
 
+		if (search_peer_group(arc, ik))
+			break;
+
 		switch (ik->type) {
 		case LIBIPCON_EVENT_PEER_ADD:
 			arc->cb.peer_add(ik->peer.name, arc->cb.data);
@@ -865,15 +893,11 @@ static int async_kevent_msg(struct ipcon_peer_handler *iph,
 			arc->cb.peer_remove(ik->peer.name, arc->cb.data);
 			break;
 		case LIBIPCON_EVENT_GRP_ADD:
-			if (in_auto_group(arc, ik))
-				break;
 			arc->cb.group_add(ik->group.peer_name,
 					ik->group.name,
 					arc->cb.data);
 			break;
 		case LIBIPCON_EVENT_GRP_REMOVE:
-			if (in_auto_group(arc, ik))
-				break;
 			arc->cb.group_remove(ik->group.peer_name,
 					ik->group.name,
 					arc->cb.data);
@@ -887,7 +911,7 @@ static int async_kevent_msg(struct ipcon_peer_handler *iph,
 	return ret;
 }
 
-static inline void auto_group(struct ipcon_peer_handler *iph,
+static inline void auto_kevent(struct ipcon_peer_handler *iph,
 			struct ipcon_msg *im)
 {
 	int ret = 0;
@@ -896,14 +920,29 @@ static inline void auto_group(struct ipcon_peer_handler *iph,
 	int i;
 
 	do {
-		if (ik->type != LIBIPCON_EVENT_GRP_ADD &&
-			ik->type != LIBIPCON_EVENT_GRP_REMOVE)
+		struct peer_group_info *pgi = search_peer_group(arc, ik);
+
+		if (!pgi)
 			break;
 
-		if (!in_auto_group(arc, ik))
+		if (ik->type == LIBIPCON_EVENT_PEER_ADD) {
+			arc->cb.peer_add(ik->peer.name, arc->cb.data);
 			break;
+		}
+
+		if (ik->type == LIBIPCON_EVENT_PEER_REMOVE) {
+			arc->cb.peer_remove(ik->peer.name, arc->cb.data);
+			break;
+		}
 
 		if (ik->type == LIBIPCON_EVENT_GRP_ADD) {
+			arc->cb.group_add(ik->group.peer_name,
+					ik->group.name,
+					arc->cb.data);
+
+			if (!pgi->auto_join)
+				break;
+
 			ret = ipcon_join_group_internal(iph,
 					ik->group.peer_name,
 					ik->group.name);
@@ -917,10 +956,18 @@ static inline void auto_group(struct ipcon_peer_handler *iph,
 		}
 
 		if (ik->type == LIBIPCON_EVENT_GRP_REMOVE) {
-			arc->cb.auto_group_leave(
-				ik->group.peer_name,
-				ik->group.name,
-				arc->cb.data);
+
+			if (pgi->auto_join) {
+				arc->cb.auto_group_leave(
+					ik->group.peer_name,
+					ik->group.name,
+					arc->cb.data);
+			}
+
+			arc->cb.group_remove(ik->group.peer_name,
+					ik->group.name,
+					arc->cb.data);
+
 			break;
 		}
 
@@ -952,18 +999,37 @@ static void *ipcon_async_rcv_thread(void *para)
 		 * This will register related groups kevent for
 		 * iph_local_handler
 		 */
-		if (!is_group_present(iph_local_handler,
-				arc->agi[i].peer_name,
-				arc->agi[i].group_name))
-			continue;
+		if (arc->pgi[i].group_name) {
+			if (!is_group_present(iph_local_handler,
+					arc->pgi[i].peer_name,
+					arc->pgi[i].group_name))
+				continue;
 
-		if (!ipcon_join_group_internal(iph,
-				arc->agi[i].peer_name,
-				arc->agi[i].group_name))
-			arc->cb.auto_group_join(
-				arc->agi[i].peer_name,
-				arc->agi[i].group_name,
-				arc->cb.data);
+			arc->cb.group_add(arc->pgi[i].peer_name,
+					arc->pgi[i].group_name,
+					arc->cb.data);
+
+			if (!arc->pgi[i].auto_join)
+				continue;
+
+			if (!ipcon_join_group_internal(iph,
+					arc->pgi[i].peer_name,
+					arc->pgi[i].group_name))
+				arc->cb.auto_group_join(
+					arc->pgi[i].peer_name,
+					arc->pgi[i].group_name,
+					arc->cb.data);
+			continue;
+		} else {
+
+			if (!is_peer_present(iph_local_handler,
+				arc->pgi[i].peer_name))
+				continue;
+
+			arc->cb.peer_add(arc->pgi[i].peer_name,
+					arc->cb.data);
+		}
+
 	}
 
 
@@ -996,7 +1062,7 @@ static void *ipcon_async_rcv_thread(void *para)
 			if (ret < 0)
 				arc->cb.rcv_msg_error(ret, arc->cb.data);
 			else if (im.type == LIBIPCON_KEVENT_MSG)
-				auto_group(iph, &im);
+				auto_kevent(iph, &im);
 		}
 
 		if (FD_ISSET(iph_fd, &rfds)) {
