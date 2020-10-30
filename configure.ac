@@ -30,6 +30,7 @@ AX_COMPARE_VERSION( [${LIBNL_GENL_VER}],
 		  )
 AC_CONFIG_FILES([Makefile
 		 lib/Makefile
+		 logger/Makefile
 		 test/Makefile
 		])
 AC_OUTPUT

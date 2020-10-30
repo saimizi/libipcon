@@ -3,7 +3,6 @@
 
 #include <string.h>
 #include <stdarg.h>
-#include "timestamp_msg.h"
 
 #define LOGGER_PEER_NAME	"ipcon_logger"
 #define LOGGER_GROUP_NAME	"ipcon_logger"

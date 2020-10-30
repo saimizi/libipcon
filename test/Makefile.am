@@ -1,8 +1,9 @@
-bin_PROGRAMS = ipcon_server ipcon_sender ipcon_user ipcon_cmd ipcon_server_poll ipcon_logger ipcon_kevent
+bin_PROGRAMS = ipcon_server ipcon_sender ipcon_user ipcon_server_poll ipcon_kevent
 
 common_cflags = -g -O2 -Wall \
 		-I ${top_srcdir}/driver/ \
 		-I ${top_srcdir}/lib/ \
+		-I ${top_srcdir}/logger/ \
 		-rdynamic \
 		-funwind-tables \
 		$(LIBNL_GENL_CFLAGS)
@@ -24,20 +25,10 @@ ipcon_user_CFLAGS =$(common_cflags)
 ipcon_user_LDFLAGS= -L${top_builddir}/lib/.libs
 ipcon_user_LDADD = $(common_ldflags) -lipcon
 
-ipcon_cmd_SOURCES = ipcon_cmd.c
-ipcon_cmd_CFLAGS =$(common_cflags)
-ipcon_cmd_LDFLAGS= -L${top_builddir}/lib/.libs
-ipcon_cmd_LDADD = $(common_ldflags) -lipcon
-
 ipcon_server_poll_SOURCES = ipcon_server_poll.c
 ipcon_server_poll_CFLAGS =$(common_cflags)
 ipcon_server_poll_LDFLAGS= -L${top_builddir}/lib/.libs
 ipcon_server_poll_LDADD = $(common_ldflags) -lipcon
-
-ipcon_logger_SOURCES = ipcon_logger.c
-ipcon_logger_CFLAGS =$(common_cflags)
-ipcon_logger_LDFLAGS= -L${top_builddir}/lib/.libs
-ipcon_logger_LDADD = $(common_ldflags) -lipcon
 
 ipcon_kevent_SOURCES = ipcon_kevent.c
 ipcon_kevent_CFLAGS =$(common_cflags)
