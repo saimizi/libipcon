@@ -86,7 +86,7 @@ int main(int argc, char *argv[])
 
 	do {
 		/* Create server handler */
-		kevent_h = ipcon_create_handler(NULL,
+		kevent_h = ipcon_create_handler("ipcon-kevent",
 				LIBIPCON_FLG_DISABLE_KEVENT_FILTER);
 		assert(kevent_h);
 			
