@@ -12,7 +12,6 @@
 
 #include "ipcon.h"
 #include "libipcon.h"
-#include "timestamp_msg.h"
 #include "ipcon_logger.h"
 
 #define ipcon_info(fmt, ...) \
@@ -40,12 +39,18 @@ static void ipcon_kevent(struct ipcon_msg *im)
 				"LIBIPCON_EVENT_GRP_ADD",
 				ik->group.peer_name,
 				ik->group.name);
+		ipcon_logger("Group %s.%s added.",
+				ik->group.peer_name,
+				ik->group.name);
 		break;
 
 	case LIBIPCON_EVENT_GRP_REMOVE:
 		ipcon_info("%15lu.%06lu\t%-32s %-32s %-32s\n",
 				tv.tv_sec, tv.tv_usec,
 				"LIBIPCON_EVENT_GRP_REMOVE",
+				ik->group.peer_name,
+				ik->group.name);
+		ipcon_logger("Group %s.%s removed.",
 				ik->group.peer_name,
 				ik->group.name);
 		break;
@@ -55,6 +60,9 @@ static void ipcon_kevent(struct ipcon_msg *im)
 				tv.tv_sec, tv.tv_usec,
 				"LIBIPCON_EVENT_PEER_ADD",
 				ik->peer.name);
+		ipcon_logger("Group %s.%s added.",
+				ik->group.peer_name,
+				ik->group.name);
 		break;
 
 	case LIBIPCON_EVENT_PEER_REMOVE:
@@ -62,6 +70,9 @@ static void ipcon_kevent(struct ipcon_msg *im)
 				tv.tv_sec, tv.tv_usec,
 				"LIBIPCON_EVENT_PEER_REMOVE",
 				ik->peer.name);
+		ipcon_logger("Group %s.%s removed.",
+				ik->group.peer_name,
+				ik->group.name);
 		break;
 	default:
 		break;

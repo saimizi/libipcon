@@ -1,4 +1,4 @@
-bin_PROGRAMS = ipcon_server ipcon_sender ipcon_user ipcon_server_poll ipcon_kevent
+bin_PROGRAMS = ipcon_server ipcon_sender ipcon_user ipcon_server_poll
 
 common_cflags = -g -O2 -Wall \
 		-I ${top_srcdir}/driver/ \
@@ -29,10 +29,5 @@ ipcon_server_poll_SOURCES = ipcon_server_poll.c
 ipcon_server_poll_CFLAGS =$(common_cflags)
 ipcon_server_poll_LDFLAGS= -L${top_builddir}/lib/.libs
 ipcon_server_poll_LDADD = $(common_ldflags) -lipcon
-
-ipcon_kevent_SOURCES = ipcon_kevent.c
-ipcon_kevent_CFLAGS =$(common_cflags)
-ipcon_kevent_LDFLAGS= -L${top_builddir}/lib/.libs
-ipcon_kevent_LDADD = $(common_ldflags) -lipcon
 
 AM_CFLAGS = -g -O2 -Wall

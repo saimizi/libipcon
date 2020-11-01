@@ -1,4 +1,4 @@
-bin_PROGRAMS = ipcon_cmd ipcon_logger
+bin_PROGRAMS = ipcon_cmd ipcon_logger ipcon_kevent
 
 common_cflags = -g -O2 -Wall \
 		-I ${top_srcdir}/driver/ \
@@ -20,5 +20,10 @@ ipcon_logger_SOURCES = ipcon_logger.c
 ipcon_logger_CFLAGS =$(common_cflags)
 ipcon_logger_LDFLAGS= -L${top_builddir}/lib/.libs
 ipcon_logger_LDADD = $(common_ldflags) -lipcon
+
+ipcon_kevent_SOURCES = ipcon_kevent.c
+ipcon_kevent_CFLAGS =$(common_cflags)
+ipcon_kevent_LDFLAGS= -L${top_builddir}/lib/.libs
+ipcon_kevent_LDADD = $(common_ldflags) -lipcon
 
 AM_CFLAGS = -g -O2 -Wall
