@@ -39,7 +39,7 @@ static void ipcon_kevent(struct ipcon_msg *im)
 				"LIBIPCON_EVENT_GRP_ADD",
 				ik->group.peer_name,
 				ik->group.name);
-		ipcon_logger("Group %s.%s added.",
+		ipcon_logger(kevent_h, "Group %s.%s added.",
 				ik->group.peer_name,
 				ik->group.name);
 		break;
@@ -50,7 +50,7 @@ static void ipcon_kevent(struct ipcon_msg *im)
 				"LIBIPCON_EVENT_GRP_REMOVE",
 				ik->group.peer_name,
 				ik->group.name);
-		ipcon_logger("Group %s.%s removed.",
+		ipcon_logger(kevent_h, "Group %s.%s removed.",
 				ik->group.peer_name,
 				ik->group.name);
 		break;
@@ -60,9 +60,8 @@ static void ipcon_kevent(struct ipcon_msg *im)
 				tv.tv_sec, tv.tv_usec,
 				"LIBIPCON_EVENT_PEER_ADD",
 				ik->peer.name);
-		ipcon_logger("Group %s.%s added.",
-				ik->group.peer_name,
-				ik->group.name);
+		ipcon_logger(kevent_h, "Peer %s added.",
+				ik->peer.name);
 		break;
 
 	case LIBIPCON_EVENT_PEER_REMOVE:
@@ -70,9 +69,8 @@ static void ipcon_kevent(struct ipcon_msg *im)
 				tv.tv_sec, tv.tv_usec,
 				"LIBIPCON_EVENT_PEER_REMOVE",
 				ik->peer.name);
-		ipcon_logger("Group %s.%s removed.",
-				ik->group.peer_name,
-				ik->group.name);
+		ipcon_logger(kevent_h, "Peer %s removed.",
+				ik->peer.name);
 		break;
 	default:
 		break;
