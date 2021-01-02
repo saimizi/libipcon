@@ -42,13 +42,16 @@ static void ipcon_cmd_peer_add(char *peer_name, void *data)
 
 	assert(ici);
 
-	if (!strcmp(peer_name, LOGGER_PEER_NAME))
-		ipcon_logger(ici->handler, "%s", ici->msg);
-	else
-		ipcon_send_unicast(ici->handler,
+	if (!strcmp(peer_name, LOGGER_PEER_NAME)) {
+		if (ici->msg)
+			ipcon_logger(ici->handler, "%s", ici->msg);
+	} else {
+		if (ici->msg)
+			ipcon_send_unicast(ici->handler,
 				ici->peer,
 				ici->msg,
 				strlen(ici->msg) + 1);
+	}
 
 	ipcon_async_rcv_stop(ici->handler);
 }
@@ -96,11 +99,6 @@ int main(int argc, char *argv[])
 			break;
 		}
 
-		if (!msg) {
-			ipcon_err("No msg specified.\n");
-			break;
-		}
-
 		handler = ipcon_create_handler(NULL, 0);
 		if (!handler) {
 			ipcon_err("Failed to create handler\n");
@@ -118,11 +116,14 @@ int main(int argc, char *argv[])
 				break;
 			}
 
-			if (flag & IPCON_CMD_LOGGER_MESSAGE)
-				ipcon_logger(handler, "%s", msg);
-			else
-				ret = ipcon_send_unicast(handler,
+			if (flag & IPCON_CMD_LOGGER_MESSAGE) {
+				if (msg)
+					ipcon_logger(handler, "%s", msg);
+			} else {
+				if (msg)
+					ret = ipcon_send_unicast(handler,
 						peer, msg, strlen(msg) + 1);
+			}
 			break;
 		}
 
