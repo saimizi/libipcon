@@ -337,6 +337,7 @@ int ipcon_chan_init(struct ipcon_peer_handler *iph)
 			ipcon_chan_destory(&iph->r_chan);
 	}
 
+	return ret;
 }
 
 

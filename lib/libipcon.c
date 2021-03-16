@@ -137,6 +137,7 @@ IPCON_HANDLER ipcon_create_handler(char *peer_name, unsigned long flags)
 	int gi = 0;
 	int ret = -1;
 
+	ipcon_dbg("Enter");
 	do {
 		int i;
 		int family;
@@ -169,6 +170,8 @@ IPCON_HANDLER ipcon_create_handler(char *peer_name, unsigned long flags)
 		ret = 0;
 
 	} while (0);
+
+	ipcon_dbg("ipcon_create_handler : ret = %d\n", ret);
 
 	if (ret < 0) {
 
@@ -219,6 +222,7 @@ int ipcon_register_group(IPCON_HANDLER handler, char *name)
 	if (!valid_name(name))
 		return -EINVAL;
 
+	ipcon_c_lock(iph);
 	do {
 		msg = nlmsg_alloc();
 		if (!msg) {
@@ -226,14 +230,13 @@ int ipcon_register_group(IPCON_HANDLER handler, char *name)
 			break;
 		}
 
-		ipcon_c_lock(iph);
 		ipconmsg_put(msg, &iph->c_chan, IPCON_GRP_REG, 0);
 		nla_put_string(msg, IPCON_ATTR_GROUP_NAME, name);
 		ipconmsg_complete(&iph->c_chan, msg);
 
 		ret = ipcon_send_rcv(&iph->c_chan, msg, NULL);
-		ipcon_c_unlock(iph);
 	} while (0);
+	ipcon_c_unlock(iph);
 
 	return ret;
 }
@@ -255,6 +258,7 @@ int is_peer_present(IPCON_HANDLER handler, char *name)
 	if (!valid_name(name))
 		return -EINVAL;
 
+	ipcon_c_lock(iph);
 	do {
 		msg = nlmsg_alloc();
 		if (!msg) {
@@ -262,14 +266,12 @@ int is_peer_present(IPCON_HANDLER handler, char *name)
 			break;
 		}
 
-		ipcon_c_lock(iph);
 		ipconmsg_put(msg, &iph->c_chan, IPCON_PEER_RESLOVE, 0);
 		nla_put_string(msg, IPCON_ATTR_PEER_NAME, name);
 
 		ret = ipcon_send_rcv(&iph->c_chan, msg, NULL);
-		ipcon_c_unlock(iph);
-
 	} while (0);
+	ipcon_c_unlock(iph);
 
 	return ret == 0;
 }
@@ -353,6 +355,7 @@ int ipcon_join_group_internal(struct ipcon_peer_handler *iph,
 	if (!valid_name(group_name))
 		return -EINVAL;
 
+	ipcon_c_lock(iph);
 	do {
 		struct ipcon_group_info *igi = NULL;
 
@@ -364,13 +367,12 @@ int ipcon_join_group_internal(struct ipcon_peer_handler *iph,
 
 		le_init(&igi->le);
 
-		ipcon_c_lock(iph);
 		ret = ipcon_get_group(iph, peer_name, group_name, &groupid);
 		if (ret < 0) {
 			free(igi);
 			break;
 		}
-		ipcon_c_unlock(iph);
+
 
 		/* Use r_chan to receive multicast message */
 		ipcon_r_lock(iph);
@@ -388,6 +390,7 @@ int ipcon_join_group_internal(struct ipcon_peer_handler *iph,
 		ipcon_r_unlock(iph);
 
 	} while (0);
+	ipcon_c_unlock(iph);
 
 	return ret;
 }
@@ -414,6 +417,7 @@ int ipcon_unregister_group(IPCON_HANDLER handler, char *name)
 		return -EINVAL;
 
 
+	ipcon_c_lock(iph);
 	do {
 		msg = nlmsg_alloc();
 		if (!msg) {
@@ -421,15 +425,13 @@ int ipcon_unregister_group(IPCON_HANDLER handler, char *name)
 			break;
 		}
 
-		ipcon_c_lock(iph);
 		ipconmsg_put(msg, &iph->c_chan, IPCON_GRP_UNREG, 0);
 		nla_put_string(msg, IPCON_ATTR_GROUP_NAME, name);
 		ipconmsg_complete(&iph->c_chan, msg);
 
 		ret = ipcon_send_rcv(&iph->c_chan, msg, NULL);
-		ipcon_c_unlock(iph);
-
 	} while (0);
+	ipcon_c_unlock(iph);
 
 	return ret;
 }
@@ -455,6 +457,7 @@ int ipcon_send_unicast(IPCON_HANDLER handler, char *name,
 	if (!valid_name(name))
 		return -EINVAL;
 
+	ipcon_s_lock(iph);
 	do {
 		msg = nlmsg_alloc();
 		if (!msg) {
@@ -462,7 +465,6 @@ int ipcon_send_unicast(IPCON_HANDLER handler, char *name,
 			break;
 		}
 
-		ipcon_s_lock(iph);
 		ipconmsg_put(msg, &iph->s_chan, IPCON_USR_MSG, 0);
 		nla_put_string(msg, IPCON_ATTR_PEER_NAME, name);
 		ipcon_data = nl_data_alloc(buf, size);
@@ -475,9 +477,9 @@ int ipcon_send_unicast(IPCON_HANDLER handler, char *name,
 		ipconmsg_complete(&iph->s_chan, msg);
 
 		ret = ipcon_send_rcv(&iph->s_chan, msg, NULL);
-		ipcon_s_unlock(iph);
 
 	} while (0);
+	ipcon_s_unlock(iph);
 
 	if (ipcon_data)
 		nl_data_free(ipcon_data);
@@ -507,6 +509,7 @@ int ipcon_send_multicast(IPCON_HANDLER handler, char *name, void *buf,
 	if (!valid_name(name))
 		return -EINVAL;
 
+	ipcon_s_lock(iph);
 	do {
 
 		msg = nlmsg_alloc();
@@ -515,7 +518,6 @@ int ipcon_send_multicast(IPCON_HANDLER handler, char *name, void *buf,
 			break;
 		}
 
-		ipcon_s_lock(iph);
 		ipconmsg_put(msg, &iph->s_chan, IPCON_MULTICAST_MSG, 0);
 		nla_put_string(msg, IPCON_ATTR_GROUP_NAME, name);
 		if (sync)
@@ -531,9 +533,9 @@ int ipcon_send_multicast(IPCON_HANDLER handler, char *name, void *buf,
 		ipconmsg_complete(&iph->s_chan, msg);
 
 		ret = ipcon_send_rcv(&iph->s_chan, msg, NULL);
-		ipcon_s_unlock(iph);
 
 	} while (0);
+	ipcon_s_unlock(iph);
 
 	if (ipcon_data)
 		nl_data_free(ipcon_data);
