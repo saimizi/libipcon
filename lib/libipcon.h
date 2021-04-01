@@ -21,6 +21,10 @@ enum libipcon_msg_type {
 #define LIBIPCON_MAX_USR_GROUP		5
 
 #define LIBIPCON_FLG_DISABLE_KEVENT_FILTER	(1UL << 0)
+#define LIBIPCON_FLG_USE_RCV_IF			(1UL << 1)
+#define LIBIPCON_FLG_USE_SND_IF			(1UL << 2)
+#define LIBIPCON_FLG_DEFAULT	\
+	(LIBIPCON_FLG_USE_RCV_IF | LIBIPCON_FLG_USE_SND_IF)
 
 
 enum libipcon_kevent_type {

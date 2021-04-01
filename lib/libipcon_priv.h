@@ -45,6 +45,8 @@ enum {
 #define IPH_FLG_ANON_PEER		(1UL << 0)
 #define IPH_FLG_DISABLE_KEVENT_FILTER	(1UL << 1)
 #define IPH_FLG_ASYNC_IO		(1UL << 2)
+#define IPH_FLG_RCV_IF			(1UL << 3)
+#define IPH_FLG_SND_IF			(1UL << 4)
 struct ipcon_peer_handler {
 	struct link_entry_head grp; /* Must be first */
 	char *name;

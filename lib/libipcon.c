@@ -160,6 +160,12 @@ IPCON_HANDLER ipcon_create_handler(char *peer_name, unsigned long flags)
 		if (flags & LIBIPCON_FLG_DISABLE_KEVENT_FILTER)
 			iph->flags |= IPH_FLG_DISABLE_KEVENT_FILTER;
 
+		if (flags & LIBIPCON_FLG_USE_RCV_IF)
+			iph->flags |= IPH_FLG_RCV_IF;
+
+		if (flags & LIBIPCON_FLG_USE_SND_IF)
+			iph->flags |= IPH_FLG_SND_IF;
+
 		ipcon_dbg("Peer name: %s\n", iph->name);
 
 		if (ipcon_chan_init(iph))
@@ -178,8 +184,11 @@ IPCON_HANDLER ipcon_create_handler(char *peer_name, unsigned long flags)
 		if (iph) {
 			/* NULL is ok for ipcon_chan_destory() */
 			ipcon_chan_destory(&iph->c_chan);
-			ipcon_chan_destory(&iph->s_chan);
-			ipcon_chan_destory(&iph->r_chan);
+			if (flags & LIBIPCON_FLG_USE_SND_IF)
+				ipcon_chan_destory(&iph->s_chan);
+
+			if (flags & LIBIPCON_FLG_USE_RCV_IF)
+				ipcon_chan_destory(&iph->r_chan);
 			free(iph);
 			iph = NULL;
 		}
@@ -200,8 +209,12 @@ void ipcon_free_handler(IPCON_HANDLER handler)
 		return;
 
 	ipcon_chan_destory(&iph->c_chan);
-	ipcon_chan_destory(&iph->s_chan);
-	ipcon_chan_destory(&iph->r_chan);
+
+	if (iph->flags & IPH_FLG_SND_IF)
+		ipcon_chan_destory(&iph->s_chan);
+
+	if (iph->flags & IPH_FLG_RCV_IF)
+		ipcon_chan_destory(&iph->r_chan);
 	free(iph->name);
 
 	free(iph);
@@ -221,6 +234,9 @@ int ipcon_register_group(IPCON_HANDLER handler, char *name)
 
 	if (!valid_name(name))
 		return -EINVAL;
+
+	if (!(iph->flags & IPH_FLG_SND_IF))
+		return -EPERM;
 
 	ipcon_c_lock(iph);
 	do {
@@ -399,6 +415,9 @@ int ipcon_join_group(IPCON_HANDLER handler, char *peer_name, char *group_name)
 {
 	struct ipcon_peer_handler *iph = handler_to_iph(handler);
 
+	if (!(iph->flags & IPH_FLG_RCV_IF))
+		return -EPERM;
+
 	return ipcon_join_group_internal(iph, peer_name, group_name);
 }
 
@@ -411,6 +430,9 @@ int ipcon_unregister_group(IPCON_HANDLER handler, char *name)
 
 	if (!iph || !name)
 		return -EINVAL;
+
+	if (!(iph->flags & IPH_FLG_SND_IF))
+		return -EPERM;
 
 	grp_name_len = (int)strlen(name);
 	if (!grp_name_len || grp_name_len > IPCON_MAX_NAME_LEN)
@@ -456,6 +478,9 @@ int ipcon_send_unicast(IPCON_HANDLER handler, char *name,
 
 	if (!valid_name(name))
 		return -EINVAL;
+
+	if (!(iph->flags & IPH_FLG_SND_IF))
+		return -EPERM;
 
 	ipcon_s_lock(iph);
 	do {
@@ -509,6 +534,9 @@ int ipcon_send_multicast(IPCON_HANDLER handler, char *name, void *buf,
 	if (!valid_name(name))
 		return -EINVAL;
 
+	if (!(iph->flags & IPH_FLG_SND_IF))
+		return -EPERM;
+
 	ipcon_s_lock(iph);
 	do {
 
@@ -559,6 +587,9 @@ int ipcon_leave_group(IPCON_HANDLER handler, char *peer_name, char *group_name)
 	if (!iph || !peer_name || !group_name)
 		return -EINVAL;
 
+	if (!(iph->flags & IPH_FLG_RCV_IF))
+		return -EPERM;
+
 	ipcon_r_lock(iph);
 	for (igi = le_next(LINK_ENTRY(iph)); igi;
 			igi = le_next(LINK_ENTRY(igi))) {
@@ -589,8 +620,13 @@ int ipcon_get_read_fd(IPCON_HANDLER handler)
 {
 	struct ipcon_peer_handler *iph = handler_to_iph(handler);
 
-	if (iph)
+
+	if (iph) {
+		if (!(iph->flags & IPH_FLG_RCV_IF))
+			return -EPERM;
+
 		return nl_socket_get_fd(iph->r_chan.sk);
+	}
 
 	return -EBADF;
 }
@@ -599,8 +635,12 @@ int ipcon_get_write_fd(IPCON_HANDLER handler)
 {
 	struct ipcon_peer_handler *iph = handler_to_iph(handler);
 
-	if (iph)
+	if (iph) {
+		if (!(iph->flags & IPH_FLG_SND_IF))
+			return -EPERM;
+
 		return nl_socket_get_fd(iph->s_chan.sk);
+	}
 
 	return -EBADF;
 }
@@ -725,8 +765,12 @@ int ipcon_rcv_timeout(IPCON_HANDLER handler, struct ipcon_msg *im,
 {
 	struct ipcon_peer_handler *iph = handler_to_iph(handler);
 
+
 	if (!iph || !im)
 		return -EINVAL;
+
+	if (!(iph->flags & IPH_FLG_RCV_IF))
+		return -EPERM;
 
 	if (iph->flags & IPH_FLG_ASYNC_IO)
 		return -EBUSY;
@@ -757,6 +801,9 @@ int ipcon_rcv(IPCON_HANDLER handler, struct ipcon_msg *im)
 	if (!iph || !im)
 		return -EINVAL;
 
+	if (!(iph->flags & IPH_FLG_RCV_IF))
+		return -EPERM;
+
 	if (iph->flags & IPH_FLG_ASYNC_IO)
 		return -EBUSY;
 
@@ -773,6 +820,9 @@ int ipcon_rcv_nonblock(IPCON_HANDLER handler, struct ipcon_msg *im)
 
 	if (!iph || !im)
 		return -EINVAL;
+
+	if (!(iph->flags & IPH_FLG_RCV_IF))
+		return -EPERM;
 
 	if (iph->flags & IPH_FLG_ASYNC_IO)
 		return -EBUSY;
@@ -985,7 +1035,8 @@ static void *ipcon_async_rcv_thread(void *para)
 	struct async_rcv_ctl *arc = iph->arc;
 	int i;
 
-	IPCON_HANDLER iph_local_handler = ipcon_create_handler(NULL, 0);
+	IPCON_HANDLER iph_local_handler = ipcon_create_handler(NULL,
+						LIBIPCON_FLG_USE_RCV_IF);
 	struct ipcon_peer_handler *iph_local = handler_to_iph(iph_local_handler);
 
 	assert(iph);
@@ -1100,6 +1151,9 @@ int ipcon_async_rcv(IPCON_HANDLER handler, struct async_rcv_ctl *arc)
 			break;
 		}
 
+		if (!(iph->flags & IPH_FLG_RCV_IF))
+			return -EPERM;
+
 		if (iph->flags & IPH_FLG_ASYNC_IO) {
 			ret = -EBUSY;
 			break;
@@ -1153,7 +1207,11 @@ void ipcon_async_rcv_stop(IPCON_HANDLER handler)
 	struct ipcon_peer_handler *iph = handler_to_iph(handler);
 
 	do {
-		assert(iph);
+		if (!iph)
+			return;
+
+		if (!(iph->flags & IPH_FLG_RCV_IF))
+			return;
 
 		if (!(iph->flags & IPH_FLG_ASYNC_IO))
 			break;

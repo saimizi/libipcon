@@ -270,6 +270,7 @@ int ipcon_chan_init(struct ipcon_peer_handler *iph)
 	do {
 		struct nl_msg *msg = NULL;
 		void *p = NULL;
+		uint32_t ipcon_flag = 0;
 
 		if (!iph || !iph->name) {
 			ret = -EINVAL;
@@ -280,22 +281,35 @@ int ipcon_chan_init(struct ipcon_peer_handler *iph)
 		if (ret < 0)
 			break;
 
-		ret = ipcon_chan_init_one(iph, IPH_S_CHAN);
-		if (ret < 0)
-			break;
-
-		ret = ipcon_chan_init_one(iph, IPH_R_CHAN);
-		if (ret < 0)
-			break;
-
 		ipcon_dbg("Name: %s.\n", iph->name);
 		ipcon_dbg("Flags: %lx.\n", iph->flags);
 		ipcon_dbg("Ctrl port: %lu.\n",
 				(unsigned long)iph->c_chan.port);
-		ipcon_dbg("Send port: %lu.\n",
-				(unsigned long)iph->s_chan.port);
-		ipcon_dbg("Receive port: %lu.\n",
+
+		if (iph->flags & IPH_FLG_RCV_IF) {
+			ipcon_dbg("IPH_FLG_RCV_IF is ON.\n");
+			ipcon_flag |= IPCON_FLG_RCV_IF;
+			ret = ipcon_chan_init_one(iph, IPH_R_CHAN);
+			if (ret < 0)
+				break;
+
+			ipcon_dbg("Receive port: %lu.\n",
 				(unsigned long)iph->r_chan.port);
+		} else {
+			ipcon_dbg("IPH_FLG_RCV_IF is OFF.\n");
+		}
+
+		if (iph->flags & IPH_FLG_SND_IF) {
+			ipcon_dbg("IPH_FLG_SND_IF is ON.\n");
+			ipcon_flag |= IPCON_FLG_SND_IF;
+			ret = ipcon_chan_init_one(iph, IPH_S_CHAN);
+			if (ret < 0)
+				break;
+			ipcon_dbg("Send port: %lu.\n",
+				(unsigned long)iph->s_chan.port);
+		} else {
+			ipcon_dbg("IPH_FLG_SND_IF is OFF.\n");
+		}
 
 		msg = nlmsg_alloc();
 		if (!msg) {
@@ -311,14 +325,17 @@ int ipcon_chan_init(struct ipcon_peer_handler *iph)
 		nla_put_u32(msg, IPCON_ATTR_RPORT, iph->r_chan.port);
 		if (iph->flags & IPH_FLG_ANON_PEER) {
 			ipcon_dbg("IPH_FLG_ANON_PEER is ON.\n");
-			nla_put_u32(msg, IPCON_ATTR_FLAG, IPCON_FLG_ANON_PEER);
+			ipcon_flag |= IPCON_FLG_ANON_PEER;
 		}
 
 		if (iph->flags & IPH_FLG_DISABLE_KEVENT_FILTER) {
 			ipcon_dbg("IPH_FLG_DISABLE_KEVENT_FILTER is ON.\n");
-			nla_put_u32(msg, IPCON_ATTR_FLAG,
-				IPCON_FLG_DISABL_KEVENT_FILTER);
+			ipcon_flag |= IPCON_FLG_DISABL_KEVENT_FILTER;
 		}
+
+
+
+		nla_put_u32(msg, IPCON_ATTR_FLAG, ipcon_flag);
 
 		ipconmsg_complete(&iph->c_chan, msg);
 
