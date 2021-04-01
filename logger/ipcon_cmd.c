@@ -99,7 +99,7 @@ int main(int argc, char *argv[])
 			break;
 		}
 
-		handler = ipcon_create_handler(NULL, 0);
+		handler = ipcon_create_handler(NULL, LIBIPCON_FLG_DEFAULT);
 		if (!handler) {
 			ipcon_err("Failed to create handler\n");
 			break;

@@ -132,7 +132,8 @@ int main(int argc, char *argv[])
 	int should_quit = 0;
 
 	handler = ipcon_create_handler(PEER_NAME,
-			LIBIPCON_FLG_DISABLE_KEVENT_FILTER);
+			LIBIPCON_FLG_DISABLE_KEVENT_FILTER |
+			LIBIPCON_FLG_DEFAULT);
 	if (!handler) {
 		ipcon_err("Failed to create handler\n");
 		return 1;

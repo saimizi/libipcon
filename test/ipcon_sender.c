@@ -109,7 +109,8 @@ int main(int argc, char *argv[])
 		}
 	};
 
-	handler = ipcon_create_handler(NULL, 0);
+	handler = ipcon_create_handler(NULL,
+			LIBIPCON_FLG_DEFAULT);
 	if (!handler) {
 		ipcon_err("Failed to create handler\n");
 		return 1;

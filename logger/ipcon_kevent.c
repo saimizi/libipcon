@@ -87,7 +87,8 @@ int main(int argc, char *argv[])
 	do {
 		/* Create server handler */
 		kevent_h = ipcon_create_handler("ipcon-kevent",
-				LIBIPCON_FLG_DISABLE_KEVENT_FILTER);
+				LIBIPCON_FLG_DISABLE_KEVENT_FILTER |
+				LIBIPCON_FLG_DEFAULT);
 		assert(kevent_h);
 			
 		ret = ipcon_join_group(kevent_h,

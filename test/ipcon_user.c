@@ -85,7 +85,7 @@ int main(int argc, char *argv[])
 	};
 
 	do {
-		user_h = ipcon_create_handler(NULL, 0);
+		user_h = ipcon_create_handler(NULL, LIBIPCON_FLG_USE_RCV_IF);
 		if (!user_h) {
 			ipcon_err("Failed to create libipcon handler.\n");
 			break;
