@@ -19,12 +19,12 @@
 #include "libipcon_priv.h"
 
 static inline void default_normal_msg_cb(char *peer_name, void *buf,
-			size_t len, void *data)
+			uint32_t len, void *data)
 {
 }
 
 static inline void default_group_msg_cb(char *peer_name, char *group_name,
-			void *buf, size_t len, void *data)
+			void *buf, uint32_t len, void *data)
 {
 }
 
@@ -294,7 +294,7 @@ int is_peer_present(IPCON_HANDLER handler, char *name)
 
 
 static int ipcon_get_group(struct ipcon_peer_handler *iph, char *peer_name,
-		char *group_name, __u32 *groupid)
+		char *group_name, uint32_t *groupid)
 {
 	void *hdr = NULL;
 	int ret = 0;
@@ -360,7 +360,7 @@ int ipcon_join_group_internal(struct ipcon_peer_handler *iph,
 		char *peer_name, char *group_name)
 {
 	int ret = 0;
-	__u32 groupid = 0;
+	uint32_t groupid = 0;
 
 	if (!iph)
 		return -EINVAL;
@@ -750,7 +750,7 @@ redo:
 			break;
 		}
 
-		im->len = (__u32) nla_len(data_attr);
+		im->len = (uint32_t) nla_len(data_attr);
 		memcpy((void *)im->buf, nla_data(data_attr), (size_t)im->len);
 
 	} while (0);
@@ -864,8 +864,11 @@ static int async_group_msg(struct ipcon_peer_handler *iph, struct ipcon_msg *im)
 		int i;
 		struct async_rcv_ctl *arc = iph->arc;
 
-		arc->cb.group_msg_cb(im->peer, im->group,
-				im->buf, im->len, arc->cb.data);
+		arc->cb.group_msg_cb(im->peer,
+                im->group,
+                im->buf,
+                im->len,
+                arc->cb.data);
 	} while (0);
 
 	return ret;

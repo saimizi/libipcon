@@ -3,6 +3,7 @@
 
 #include <linux/types.h>
 #include <string.h>
+#include <stdint.h>
 
 #define IPCON_HANDLER	void *
 
@@ -51,7 +52,7 @@ struct ipcon_msg {
 	enum libipcon_msg_type type;
 	char group[LIBIPCON_MAX_NAME_LEN];
 	char peer[LIBIPCON_MAX_NAME_LEN];
-	__u32 len;
+	uint32_t len;
 	union {
 		char buf[LIBIPCON_MAX_PAYLOAD_LEN];
 		struct libipcon_kevent kevent;
@@ -67,9 +68,9 @@ struct peer_group_info {
 
 struct async_cb_ctl {
 	void (*normal_msg_cb)(char *peer_name, void *buf,
-			size_t len, void *data);
+			uint32_t len, void *data);
 	void (*group_msg_cb)(char *peer_name, char *group_name,
-			void *buf, size_t len, void *data);
+			void *buf, uint32_t len, void *data);
 	void  (*peer_add)(char *peer_name, void *data);
 	void (*peer_remove)(char *peer_name, void *data);
 	void  (*group_add)(char *peer_name, char *group_name, void *data);
@@ -102,7 +103,7 @@ int ipcon_leave_group(IPCON_HANDLER handler, char *srvname, char *grpname);
 int ipcon_get_read_fd(IPCON_HANDLER handler);
 int ipcon_get_write_fd(IPCON_HANDLER handler);
 
-int ipcon_find_group(IPCON_HANDLER handler, char *name, __u32 *groupid);
+int ipcon_find_group(IPCON_HANDLER handler, char *name, uint32_t *groupid);
 int ipcon_send_multicast(IPCON_HANDLER handler, char *name, void *buf,
 			size_t size, int sync);
 int ipcon_rcv_timeout(IPCON_HANDLER handler, struct ipcon_msg *im,
