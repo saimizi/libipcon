@@ -14,8 +14,7 @@
 #include "libipcon.h"
 #include "ipcon_logger.h"
 
-#define ipcon_info(fmt, ...) \
-	fprintf(stderr, fmt, ##__VA_ARGS__)
+#define ipcon_info(fmt, ...) fprintf(stderr, fmt, ##__VA_ARGS__)
 
 IPCON_HANDLER kevent_h;
 
@@ -34,50 +33,36 @@ static void ipcon_kevent(struct ipcon_msg *im)
 
 	switch (ik->type) {
 	case LIBIPCON_EVENT_GRP_ADD:
-		ipcon_info("%15lu.%06lu\t%-32s %-32s %-32s\n",
-				tv.tv_sec, tv.tv_usec,
-				"LIBIPCON_EVENT_GRP_ADD",
-				ik->group.peer_name,
-				ik->group.name);
+		ipcon_info("%15lu.%06lu\t%-32s %-32s %-32s\n", tv.tv_sec,
+			   tv.tv_usec, "LIBIPCON_EVENT_GRP_ADD",
+			   ik->group.peer_name, ik->group.name);
 		ipcon_logger(kevent_h, "Group %s.%s added.",
-				ik->group.peer_name,
-				ik->group.name);
+			     ik->group.peer_name, ik->group.name);
 		break;
 
 	case LIBIPCON_EVENT_GRP_REMOVE:
-		ipcon_info("%15lu.%06lu\t%-32s %-32s %-32s\n",
-				tv.tv_sec, tv.tv_usec,
-				"LIBIPCON_EVENT_GRP_REMOVE",
-				ik->group.peer_name,
-				ik->group.name);
+		ipcon_info("%15lu.%06lu\t%-32s %-32s %-32s\n", tv.tv_sec,
+			   tv.tv_usec, "LIBIPCON_EVENT_GRP_REMOVE",
+			   ik->group.peer_name, ik->group.name);
 		ipcon_logger(kevent_h, "Group %s.%s removed.",
-				ik->group.peer_name,
-				ik->group.name);
+			     ik->group.peer_name, ik->group.name);
 		break;
 
 	case LIBIPCON_EVENT_PEER_ADD:
-		ipcon_info("%15lu.%06lu\t%-32s %-32s\n",
-				tv.tv_sec, tv.tv_usec,
-				"LIBIPCON_EVENT_PEER_ADD",
-				ik->peer.name);
-		ipcon_logger(kevent_h, "Peer %s added.",
-				ik->peer.name);
+		ipcon_info("%15lu.%06lu\t%-32s %-32s\n", tv.tv_sec, tv.tv_usec,
+			   "LIBIPCON_EVENT_PEER_ADD", ik->peer.name);
+		ipcon_logger(kevent_h, "Peer %s added.", ik->peer.name);
 		break;
 
 	case LIBIPCON_EVENT_PEER_REMOVE:
-		ipcon_info("%15lu.%06lu\t%-32s %-32s\n",
-				tv.tv_sec, tv.tv_usec,
-				"LIBIPCON_EVENT_PEER_REMOVE",
-				ik->peer.name);
-		ipcon_logger(kevent_h, "Peer %s removed.",
-				ik->peer.name);
+		ipcon_info("%15lu.%06lu\t%-32s %-32s\n", tv.tv_sec, tv.tv_usec,
+			   "LIBIPCON_EVENT_PEER_REMOVE", ik->peer.name);
+		ipcon_logger(kevent_h, "Peer %s removed.", ik->peer.name);
 		break;
 	default:
 		break;
 	}
 }
-
-
 
 int main(int argc, char *argv[])
 {
@@ -86,21 +71,20 @@ int main(int argc, char *argv[])
 
 	do {
 		/* Create server handler */
-		kevent_h = ipcon_create_handler("ipcon-kevent",
-				LIBIPCON_FLG_DISABLE_KEVENT_FILTER |
-				LIBIPCON_FLG_DEFAULT);
+		kevent_h = ipcon_create_handler(
+			"ipcon-kevent", LIBIPCON_FLG_DISABLE_KEVENT_FILTER |
+						LIBIPCON_FLG_DEFAULT);
 		assert(kevent_h);
-			
-		ret = ipcon_join_group(kevent_h,
-				LIBIPCON_KERNEL_NAME,
-				LIBIPCON_KERNEL_GROUP_NAME);
+
+		ret = ipcon_join_group(kevent_h, LIBIPCON_KERNEL_NAME,
+				       LIBIPCON_KERNEL_GROUP_NAME);
 		assert(ret == 0);
 
 		while (!should_quit) {
 			struct ipcon_msg im;
 			fd_set rfds;
 			int kfd = ipcon_get_read_fd(kevent_h);
-			int nfd = kfd + 1; 
+			int nfd = kfd + 1;
 
 			FD_ZERO(&rfds);
 			FD_SET(kfd, &rfds);
@@ -119,9 +103,8 @@ int main(int argc, char *argv[])
 				ipcon_kevent(&im);
 			}
 		}
-		ipcon_leave_group(kevent_h,
-				LIBIPCON_KERNEL_NAME,
-				LIBIPCON_KERNEL_GROUP_NAME);
+		ipcon_leave_group(kevent_h, LIBIPCON_KERNEL_NAME,
+				  LIBIPCON_KERNEL_GROUP_NAME);
 
 		/* Free handler */
 		ipcon_free_handler(kevent_h);
@@ -129,5 +112,4 @@ int main(int argc, char *argv[])
 	} while (0);
 
 	exit(ret);
-
 }

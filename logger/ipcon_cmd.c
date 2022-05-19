@@ -13,22 +13,22 @@
 #include "libipcon.h"
 #include "ipcon_logger.h"
 
-#define ipcon_dbg(fmt, ...) \
-	fprintf(stderr, "[ipcon_cmd] Debug: "fmt, ##__VA_ARGS__)
-#define ipcon_info(fmt, ...) \
-	fprintf(stderr, "[ipcon_cmd] Info: "fmt, ##__VA_ARGS__)
-#define ipcon_err(fmt, ...) \
-	fprintf(stderr, "[ipcon_cmd] Error: "fmt, ##__VA_ARGS__)
+#define ipcon_dbg(fmt, ...)                                                    \
+	fprintf(stderr, "[ipcon_cmd] Debug: " fmt, ##__VA_ARGS__)
+#define ipcon_info(fmt, ...)                                                   \
+	fprintf(stderr, "[ipcon_cmd] Info: " fmt, ##__VA_ARGS__)
+#define ipcon_err(fmt, ...)                                                    \
+	fprintf(stderr, "[ipcon_cmd] Error: " fmt, ##__VA_ARGS__)
 
-#define PEER_NAME	"ipcon_cmd"
+#define PEER_NAME "ipcon_cmd"
 
 void ipcon_cmd_usage(void)
 {
 	fprintf(stderr, "Usage: ipcon_cmd [lw] -p [peer name] -m <msg>\n");
 }
 
-#define IPCON_CMD_LOGGER_MESSAGE	(1 << 0)
-#define IPCON_CMD_WAIT_PEER		(1 << 1)
+#define IPCON_CMD_LOGGER_MESSAGE (1 << 0)
+#define IPCON_CMD_WAIT_PEER (1 << 1)
 
 struct ipcon_cmd_info {
 	IPCON_HANDLER handler;
@@ -47,10 +47,8 @@ static void ipcon_cmd_peer_add(char *peer_name, void *data)
 			ipcon_logger(ici->handler, "%s", ici->msg);
 	} else {
 		if (ici->msg)
-			ipcon_send_unicast(ici->handler,
-				ici->peer,
-				ici->msg,
-				strlen(ici->msg) + 1);
+			ipcon_send_unicast(ici->handler, ici->peer, ici->msg,
+					   strlen(ici->msg) + 1);
 	}
 
 	ipcon_async_rcv_stop(ici->handler);
@@ -58,10 +56,9 @@ static void ipcon_cmd_peer_add(char *peer_name, void *data)
 
 int main(int argc, char *argv[])
 {
-
 	int ret = 0;
 	int c;
-	IPCON_HANDLER	handler;
+	IPCON_HANDLER handler;
 	char *peer = NULL;
 	char *msg = NULL;
 	unsigned long flag = 0;
@@ -121,8 +118,9 @@ int main(int argc, char *argv[])
 					ipcon_logger(handler, "%s", msg);
 			} else {
 				if (msg)
-					ret = ipcon_send_unicast(handler,
-						peer, msg, strlen(msg) + 1);
+					ret = ipcon_send_unicast(
+						handler, peer, msg,
+						strlen(msg) + 1);
 			}
 			break;
 		}
@@ -134,15 +132,15 @@ int main(int argc, char *argv[])
 		memset(&pgi, 0, sizeof(pgi));
 		memset(&arc, 0, sizeof(arc));
 
-		pgi.peer_name	= peer;
-		arc.pgi		= &pgi;
-		arc.num		= 1;
-		arc.cb.peer_add	= ipcon_cmd_peer_add;
-		arc.cb.data	= &ici;
+		pgi.peer_name = peer;
+		arc.pgi = &pgi;
+		arc.num = 1;
+		arc.cb.peer_add = ipcon_cmd_peer_add;
+		arc.cb.data = &ici;
 
-		ici.handler	= handler;
-		ici.peer	= peer;
-		ici.msg		= msg;
+		ici.handler = handler;
+		ici.peer = peer;
+		ici.msg = msg;
 
 		ret = ipcon_async_rcv(handler, &arc);
 

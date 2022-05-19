@@ -16,14 +16,14 @@
 #include "libipcon.h"
 #include "ipcon_logger.h"
 
-#define ipcon_dbg(fmt, ...) \
-	fprintf(stderr, "[ipcon_logger] Debug: "fmt, ##__VA_ARGS__)
-#define ipcon_info(fmt, ...) \
-	fprintf(stderr, "[ipcon_logger] Info: "fmt, ##__VA_ARGS__)
-#define ipcon_err(fmt, ...) \
-	fprintf(stderr, "[ipcon_logger] Error: "fmt, ##__VA_ARGS__)
+#define ipcon_dbg(fmt, ...)                                                    \
+	fprintf(stderr, "[ipcon_logger] Debug: " fmt, ##__VA_ARGS__)
+#define ipcon_info(fmt, ...)                                                   \
+	fprintf(stderr, "[ipcon_logger] Info: " fmt, ##__VA_ARGS__)
+#define ipcon_err(fmt, ...)                                                    \
+	fprintf(stderr, "[ipcon_logger] Error: " fmt, ##__VA_ARGS__)
 
-#define IPCON_LOGGER_FILE	"/var/log/ipcon.log"
+#define IPCON_LOGGER_FILE "/var/log/ipcon.log"
 
 FILE *logfile = 0;
 
@@ -31,17 +31,14 @@ static void normal_msg_handler(IPCON_HANDLER handler, struct ipcon_msg *im)
 {
 	struct logger_msg *lm = (struct logger_msg *)im->buf;
 
-	fprintf(logfile, "[%d.%06d] %s: %s\n",
-		(int)lm->ts.tv_sec,
-		(int)lm->ts.tv_usec,
-		im->peer,
-		lm->msg);
+	fprintf(logfile, "[%d.%06d] %s: %s\n", (int)lm->ts.tv_sec,
+		(int)lm->ts.tv_usec, im->peer, lm->msg);
 }
 
 int main(int argc, char *argv[])
 {
 	int ret = 0;
-	IPCON_HANDLER	handler;
+	IPCON_HANDLER handler;
 	int should_quit = 0;
 	struct sched_param sp;
 
@@ -57,14 +54,13 @@ int main(int argc, char *argv[])
 
 	setvbuf(logfile, NULL, _IONBF, 0);
 
-	handler = ipcon_create_handler(LOGGER_PEER_NAME,
-			LIBIPCON_FLG_USE_RCV_IF);
+	handler =
+		ipcon_create_handler(LOGGER_PEER_NAME, LIBIPCON_FLG_USE_RCV_IF);
 	if (!handler) {
 		fclose(logfile);
 		ipcon_err("Failed to create handler\n");
 		return 1;
 	}
-
 
 	while (!should_quit) {
 		struct ipcon_msg im;
@@ -72,7 +68,7 @@ int main(int argc, char *argv[])
 		ret = ipcon_rcv(handler, &im);
 		if (ret < 0) {
 			ipcon_err("%s : %s (%d).\n", LOGGER_PEER_NAME,
-				strerror(-ret), -ret);
+				  strerror(-ret), -ret);
 			continue;
 		}
 

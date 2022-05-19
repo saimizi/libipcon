@@ -4,7 +4,6 @@
 
 char libipcon_log_level = 1;
 
-
 void libipcon_dbg_init()
 {
 	long log_level = -1;
@@ -38,7 +37,6 @@ void libipcon_dbg_init()
 		default:
 			libipcon_log_level = LIBIPCONF_LOG_LEVEL_DEBUG;
 			break;
-
 		}
 	} while (0);
 }
