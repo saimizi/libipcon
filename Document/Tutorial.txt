@@ -353,19 +353,19 @@ possible for a peer to publish its name to wait for being discoverred by the
 specific partner and stop the name publishing after being discovrered.
 
 When a process registers its service peer, the other processes (named process
-Client) may get its port number by calling ipcon_find_service() to reslove the
+Client) may get its port number by calling is_peer_present() to reslove the
 service name.
 
 Ex. Find a service
 ================================================================================
 __u32 srv_port;
-ret = ipcon_find_service(handler, "ServerX", &srv_port);
+ret = is_peer_present(handler, "ServerX", &srv_port);
 if (!ret)
 	fprintf(stderr, "Found service %s@%lu\n",
 			"ServerX", (unsigned long)srv_port);
 ================================================================================
 
-If the service "ServerX" is found, ipcon_find_service() will return 0 and save
+If the service "ServerX" is found, is_peer_present() will return 0 and save
 the port number to srv_port variable. Client process may use this port number to
 send/receive messages to/from the Server process(See 5.5 Receive a message and
 5.6 Send a message).
@@ -375,10 +375,10 @@ Note:
     processes. It is the responsibilty of the user processes to do judge whether
     a communication partner is an valid one or not.
 
-If the specified service is not found, ipcon_find_service() will not be blocked
+If the specified service is not found, is_peer_present() will not be blocked
 and return an negative error code (-ENOENT) imediately. You may doubt that since
-ipcon_find_service() is non-blocked, if the service "ServiceX" is registerred
-after the Client's ipcon_find_service() call, should I do a while loop here to
+is_peer_present() is non-blocked, if the service "ServiceX" is registerred
+after the Client's is_peer_present() call, should I do a while loop here to
 wait for it? Of courcse, that is OK, but not good. You may use IPCON driver's
 IPCON_KERNEL_GROUP group message to detect service registeration asynchrously which
 will be described later in this tutorial.
@@ -637,7 +637,7 @@ int main (int argc, char *argv[])
 		return -1;
 	}
 
-	ret = ipcon_find_service(handler, service_name, &srv_port);
+	ret = is_peer_present(handler, service_name, &srv_port);
 	if (ret< 0) {
 		fprintf(stderr, "No service %s found\n", service_name);
 		return ret;
@@ -849,7 +849,7 @@ int main (int argc, char *argv[])
 	 *    Note: this step 2 must NOT be done before step 1 above.
 	 *          Otherwise you may failed to detect service properly.
 	 */
-	ipcon_find_service(handler, service_name, &srv_port);
+	is_peer_present(handler, service_name, &srv_port);
 
 	while (!should_quit) {
 		struct ipcon_msg im;
