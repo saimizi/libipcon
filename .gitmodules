@@ -1,0 +1,3 @@
+[submodule "samples/jsutils"]
+	path = samples/jsutils
+	url = https://gitlab.com/joukan/jsutils.git
