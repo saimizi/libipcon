@@ -53,6 +53,7 @@ struct data *read_data(void)
 
 static void read_data_malloc_fail(void **state)
 {
+	will_return(__wrap_malloc, 0);
 	will_return(__wrap_malloc, NULL);
 
 	struct data *d = read_data();
@@ -65,6 +66,7 @@ static void read_data_open_fail(void **state)
 		.i_data = 10,
 		.p_data = NULL,
 	};
+	will_return(__wrap_malloc, 0);
 	will_return(__wrap_malloc, &d);
 	will_return(__wrap_open, -1);
 	will_return(__wrap_open, ENOENT);
@@ -79,6 +81,7 @@ static void read_data_read_fail(void **state)
 		.i_data = 10,
 		.p_data = NULL,
 	};
+	will_return(__wrap_malloc, 0);
 	will_return(__wrap_malloc, &d);
 	will_return(__wrap_open, 2);
 	will_return(__wrap_read, -1);
@@ -95,6 +98,7 @@ static void read_data_success(void **state)
 		.i_data = 10,
 		.p_data = NULL,
 	};
+	will_return(__wrap_malloc, 0);
 	will_return(__wrap_malloc, &d);
 	will_return(__wrap_open, 2);
 	will_return(__wrap_read, sizeof(d));
