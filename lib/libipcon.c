@@ -156,6 +156,9 @@ IPCON_HANDLER ipcon_create_handler(char *peer_name, unsigned long flags)
 			iph->name = auto_peer_name();
 		}
 
+		if (!iph->name)
+			break;
+
 		if (flags & LIBIPCON_FLG_DISABLE_KEVENT_FILTER)
 			iph->flags |= IPH_FLG_DISABLE_KEVENT_FILTER;
 
@@ -166,7 +169,6 @@ IPCON_HANDLER ipcon_create_handler(char *peer_name, unsigned long flags)
 			iph->flags |= IPH_FLG_SND_IF;
 
 		ipcon_dbg("Peer name: %s\n", iph->name);
-
 		if (ipcon_chan_init(iph))
 			break;
 
@@ -180,13 +182,13 @@ IPCON_HANDLER ipcon_create_handler(char *peer_name, unsigned long flags)
 
 	if (ret < 0) {
 		if (iph) {
+			if (iph->name)
+				free(iph->name);
+
 			/* NULL is ok for ipcon_chan_destory() */
 			ipcon_chan_destory(&iph->c_chan);
-			if (flags & LIBIPCON_FLG_USE_SND_IF)
-				ipcon_chan_destory(&iph->s_chan);
-
-			if (flags & LIBIPCON_FLG_USE_RCV_IF)
-				ipcon_chan_destory(&iph->r_chan);
+			ipcon_chan_destory(&iph->s_chan);
+			ipcon_chan_destory(&iph->r_chan);
 			free(iph);
 			iph = NULL;
 		}

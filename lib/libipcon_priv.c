@@ -37,7 +37,6 @@ static inline int ipcon_chan_init_one(struct ipcon_peer_handler *iph,
 	int ret = 0;
 	pthread_mutexattr_t mtxAttr;
 	struct sockaddr_nl local;
-	int pthread_mutex_initialized = 0;
 	struct ipcon_channel *ic = NULL;
 	struct nl_cb *cb = NULL;
 
@@ -72,7 +71,7 @@ static inline int ipcon_chan_init_one(struct ipcon_peer_handler *iph,
 			break;
 		}
 
-		pthread_mutex_initialized = 1;
+		ic->mutex_initialized = true;
 
 		switch (chan_id) {
 		case IPH_C_CHAN:
@@ -127,13 +126,8 @@ static inline int ipcon_chan_init_one(struct ipcon_peer_handler *iph,
 
 	nl_cb_put(cb);
 
-	if (ret < 0) {
-		if (ic && ic->sk)
-			nl_close(ic->sk);
-
-		if (pthread_mutex_initialized)
-			pthread_mutex_destroy(&ic->mutex);
-	}
+	if (ret < 0)
+		ipcon_chan_destory(ic);
 
 	return ret;
 }
@@ -334,14 +328,9 @@ int ipcon_chan_init(struct ipcon_peer_handler *iph)
 	} while (0);
 
 	if (ret < 0) {
-		if (iph->c_chan.sk)
-			ipcon_chan_destory(&iph->c_chan);
-
-		if (iph->s_chan.sk)
-			ipcon_chan_destory(&iph->s_chan);
-
-		if (iph->r_chan.sk)
-			ipcon_chan_destory(&iph->r_chan);
+		ipcon_chan_destory(&iph->c_chan);
+		ipcon_chan_destory(&iph->s_chan);
+		ipcon_chan_destory(&iph->r_chan);
 	}
 
 	return ret;
@@ -352,6 +341,13 @@ void ipcon_chan_destory(struct ipcon_channel *ic)
 	if (!ic)
 		return;
 
-	nl_close(ic->sk);
-	pthread_mutex_destroy(&ic->mutex);
+	if (ic->sk) {
+		nl_close(ic->sk);
+		ic->sk = 0;
+	}
+
+	if (ic->mutex_initialized) {
+		pthread_mutex_destroy(&ic->mutex);
+		ic->mutex_initialized = false;
+	}
 };

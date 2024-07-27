@@ -1,9 +1,14 @@
 if(UNIT_TEST)
   set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -DUNIT_TEST")
+
+  # --wrap may fails when using O2/Os
+  set(LIBIPCON_CFLAGS "-g -O1")
+else()
+  set(LIBIPCON_CFLAGS "-g -O2")
 endif()
 
 set(LIBIPCON_CFLAGS
-    "-g \
+    "${LIBIPCON_CFLAGS} \
     -Wextra \
     -Werror \
     -Wformat=2 \
@@ -14,7 +19,6 @@ set(LIBIPCON_CFLAGS
     -Wpointer-arith \
     -Wswitch-enum \
     -Wno-unused-function \
-    -O2 \
     -U_FORTIFY_SOURCE \
     -D_FORTIFY_SOURCE=2 \
     -ftrapv \
@@ -36,8 +40,13 @@ set(LIBIPCON_SOURCE_FILES
     ${CMAKE_CURRENT_SOURCE_DIR}/libipcon_dbg.c
     ${CMAKE_CURRENT_SOURCE_DIR}/libipcon_priv.c)
 
-add_library(ipcon SHARED ${LIBIPCON_SOURCE_FILES})
+if(UNIT_TEST)
+  add_library(ipcon STATIC ${LIBIPCON_SOURCE_FILES})
+else()
+  add_library(ipcon SHARED ${LIBIPCON_SOURCE_FILES})
+endif()
 target_link_libraries(ipcon ${LIBNL_GENL_LIBRARIES})
+
 set_target_properties(ipcon PROPERTIES VERSION ${CMAKE_PROJECT_VERSION}
                                        SOVERSION ${PROJECT_VERSION_MAJOR})
 target_include_directories(ipcon PUBLIC ${LIBIPCON_INCLUDE_DIR})

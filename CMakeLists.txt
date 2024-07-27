@@ -24,6 +24,13 @@ add_subdirectory(lib)
 
 if(UNIT_TEST)
   add_subdirectory(test)
+  if(BUILD_LOGGER)
+    message(WARNING "BUILD_LOGGER is ignored when UNIT_TEST is enabled")
+  endif()
+
+  if(BUILD_SAMPLES)
+    message(WARNING "BUILD_SAMPLES is ignored when UNIT_TEST is enabled")
+  endif()
 else()
   if(BUILD_LOGGER)
     add_subdirectory(logger)
