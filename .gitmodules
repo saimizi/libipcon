@@ -1,3 +1,6 @@
 [submodule "samples/jsutils"]
 	path = samples/jsutils
 	url = https://gitlab.com/joukan/jsutils.git
+[submodule "test/mocklib"]
+	path = test/mocklib
+	url = https://github.com/saimizi/mocklib.git
