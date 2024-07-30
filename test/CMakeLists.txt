@@ -1,10 +1,10 @@
 add_subdirectory(mocklib)
 
 # ############# libipcon_mocklib ############################
-add_library(libipcon_mocklib SHARED
+add_library(ipcon_mocklib SHARED
             ${CMAKE_CURRENT_SOURCE_DIR}/libipcon_mocklib/libipcon_mock.c)
 target_include_directories(
-  libipcon_mocklib
+  ipcon_mocklib
   PUBLIC ${PROJECT_SOURCE_DIR}/lib ${PROJECT_SOURCE_DIR}/driver
          ${LIBNL_GENL_INCLUDE_DIRS})
 
@@ -21,7 +21,7 @@ execute_process(
   OUTPUT_VARIABLE LIBIPCON_WRAP_SYMBOLES)
 
 add_library(libipcon_wrap_symbols INTERFACE)
-target_link_libraries(libipcon_wrap_symbols INTERFACE libipcon_mocklib)
+target_link_libraries(libipcon_wrap_symbols INTERFACE ipcon_mocklib)
 target_link_options(libipcon_wrap_symbols INTERFACE
                     "-Wl,${LIBIPCON_WRAP_SYMBOLES}")
 
