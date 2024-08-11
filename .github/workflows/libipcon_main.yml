@@ -1,0 +1,55 @@
+name: libipcon_main
+run-name: Build & Unit Test
+on:
+  pull_request:
+    branches:
+      - main
+  push:
+    branches:
+      - main
+jobs:
+  build-libipcon:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Add dependent packages
+        run: |
+          sudo apt update
+          sudo apt install libnl-genl-3-dev
+          sudo apt install cmocka-doc libcmocka-dev libcmocka0
+      - name: Check out repository code
+        uses: actions/checkout@v4
+      - name: Build libipcon
+        run: |
+          cd ${{ github.workspace }}
+          mkdir build
+          cd build
+
+          cmake -DCMAKE_VERBOSE_MAKEFILE=1 -DUNIT_TEST=OFF ..
+          make -j 4
+      - run: echo "🍏 This job's status is ${{ job.status }}."
+  test-libipcon:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Add dependent packages
+        run: |
+          sudo apt update
+          sudo apt install libnl-genl-3-dev
+          sudo apt install cmocka-doc libcmocka-dev libcmocka0
+      - name: Check out repository code
+        uses: actions/checkout@v4
+      - name: Build libipcon unit tests
+        run: |
+          cd ${{ github.workspace }}
+          git submodule update --init --recursive
+          mkdir build
+          cd build
+
+          cmake -DCMAKE_VERBOSE_MAKEFILE=1 -DUNIT_TEST=ON ..
+          make -j 4
+      - name: Run libipcon unit tests
+        run: |
+          cd ${{ github.workspace }}
+          cd build
+          ./test/ut_ipcon
+
+      - run: echo "🍏 This job's status is ${{ job.status }}."
