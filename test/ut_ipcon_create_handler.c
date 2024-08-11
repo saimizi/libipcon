@@ -1,11 +1,9 @@
 #include <stdio.h>
 #include <errno.h>
-#include <stdlib.h>
 #include <stdarg.h>
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
-#include <setjmp.h>
 #include <linux/uinput.h>
 
 //open()
@@ -16,8 +14,7 @@
 //read()
 #include <unistd.h>
 
-// should be last
-#include <cmocka.h>
+#include "ut.h"
 
 #include "libipcon.h"
 
@@ -121,14 +118,14 @@ static void ipcon_create_handler_chan_init_fail(void **state)
 	assert_null(handler);
 }
 
-int main(void)
+int ipcon_create_handler_run(void *)
 {
-	const struct CMUnitTest tests[] = {
+	static struct CMUnitTest tests[] = {
 		cmocka_unit_test(ipcon_create_handler_iph_malloc_fail),
 		cmocka_unit_test(ipcon_create_handler_strdup_fail),
 		cmocka_unit_test(ipcon_create_handler_auto_name_fail),
 		cmocka_unit_test(ipcon_create_handler_chan_init_fail),
 	};
 
-	return cmocka_run_group_tests(tests, NULL, NULL);
+	cmocka_run_group_tests(tests, NULL, NULL);
 }

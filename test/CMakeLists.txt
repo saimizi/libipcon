@@ -4,9 +4,8 @@ add_subdirectory(mocklib)
 add_library(ipcon_mocklib SHARED
             ${CMAKE_CURRENT_SOURCE_DIR}/libipcon_mocklib/libipcon_mock.c)
 target_include_directories(
-  ipcon_mocklib
-  PUBLIC ${PROJECT_SOURCE_DIR}/lib ${PROJECT_SOURCE_DIR}/driver
-         ${LIBNL_GENL_INCLUDE_DIRS})
+  ipcon_mocklib PUBLIC ${PROJECT_SOURCE_DIR}/lib ${PROJECT_SOURCE_DIR}/driver
+                       ${LIBNL_GENL_INCLUDE_DIRS})
 
 # Reconfigure to set WRAP_SYMBOLES if mock library sources are changed.
 set_property(
@@ -32,7 +31,7 @@ target_link_libraries(sample01 cmocka wrap_symbols)
 set(LIBIPCON_INCLUDE ${PROJECT_SOURCE_DIR}/lib/ LIBNL_GENL_INCLUDE_DIRS)
 
 # ######################### libipcon ############################
-add_executable(ut_ipcon_create_handler ut_ipcon_create_handler.c)
-target_link_libraries(ut_ipcon_create_handler cmocka wrap_symbols ipcon
-                      libipcon_wrap_symbols)
-target_include_directories(ut_ipcon_create_handler PUBLIC ${LIBIPCON_INCLUDE})
+set(UT_SOURCES ut_main.c ut_ipcon_create_handler.c)
+add_executable(ut_ipcon ${UT_SOURCES})
+target_link_libraries(ut_ipcon cmocka wrap_symbols ipcon libipcon_wrap_symbols)
+target_include_directories(ut_ipcon PUBLIC ${LIBIPCON_INCLUDE})
