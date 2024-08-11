@@ -88,7 +88,6 @@ int __wrap_ipcon_chan_init(struct ipcon_peer_handler *iph)
 static void ipcon_create_handler_chan_init_fail(void **state)
 {
 	char iph_mem[1024];
-	/* don't specify peer name */
 	char *peer_name = "ut_test";
 	char *strdup_peer_name = "ut_test";
 
@@ -118,6 +117,58 @@ static void ipcon_create_handler_chan_init_fail(void **state)
 	assert_null(handler);
 }
 
+static void ipcon_create_handler_peer_name(void **state)
+{
+	char iph_mem[1024];
+	char *peer_name = "ut_test";
+	char *strdup_peer_name = "ut_test";
+
+	assert_non_null(iph_mem);
+	will_return(__wrap_malloc, 0);
+	will_return(__wrap_malloc, iph_mem);
+
+	/* check strdup parameter */
+	will_return(__wrap_strdup, 1);
+	expect_string(__wrap_strdup, s, peer_name);
+	will_return(__wrap_strdup, strdup_peer_name);
+
+	/* check ipcon_chan_init parameter */
+	will_return(__wrap_ipcon_chan_init, 0);
+	will_return(__wrap_ipcon_chan_init, 0);
+
+	IPCON_HANDLER handler = ipcon_create_handler(peer_name, 0);
+
+	struct ipcon_peer_handler *iph = handler_to_iph(handler);
+	assert_non_null(iph);
+	assert_string_equal(peer_name, iph->name);
+
+	/* IPH_FLG_ANON_PEER must not be set */
+	assert_false(iph->flags & IPH_FLG_ANON_PEER);
+}
+
+static void ipcon_create_handler_auto_peer_name(void **state)
+{
+	char iph_mem[1024];
+	char name[IPCON_MAX_NAME_LEN];
+
+	will_return(__wrap_malloc, 0);
+	will_return(__wrap_malloc, iph_mem);
+
+	will_return(__wrap_malloc, 0);
+	will_return(__wrap_malloc, name);
+
+	/* check ipcon_chan_init parameter */
+	will_return(__wrap_ipcon_chan_init, 0);
+	will_return(__wrap_ipcon_chan_init, 0);
+
+	IPCON_HANDLER handler = ipcon_create_handler(NULL, 0);
+
+	struct ipcon_peer_handler *iph = handler_to_iph(handler);
+	assert_non_null(iph);
+	assert_true(!strncmp(iph->name, "Anon-", 5));
+	assert_true(iph->flags & IPH_FLG_ANON_PEER);
+}
+
 int ipcon_create_handler_run(void *)
 {
 	static struct CMUnitTest tests[] = {
@@ -125,6 +176,9 @@ int ipcon_create_handler_run(void *)
 		cmocka_unit_test(ipcon_create_handler_strdup_fail),
 		cmocka_unit_test(ipcon_create_handler_auto_name_fail),
 		cmocka_unit_test(ipcon_create_handler_chan_init_fail),
+		cmocka_unit_test(ipcon_create_handler_peer_name),
+		cmocka_unit_test(ipcon_create_handler_auto_peer_name),
+
 	};
 
 	cmocka_run_group_tests(tests, NULL, NULL);
