@@ -3,7 +3,9 @@ extern int ipcon_create_handler_run(void *);
 
 int main(void)
 {
-	ipcon_create_handler_run(NULL);
+	int ret = 0;
 
-	return 0;
+	ret = (ret == 0) ? ipcon_create_handler_run(NULL) : ret;
+
+	return ret;
 }
