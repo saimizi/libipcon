@@ -187,7 +187,7 @@ static void ipcon_create_handler_auto_peer_name(void **state)
 	assert_true(iph->flags & IPH_FLG_ANON_PEER);
 }
 
-int ipcon_create_handler_run(void *)
+int ipcon_create_handler_run(void *state)
 {
 	static struct CMUnitTest tests[] = {
 		cmocka_unit_test(ipcon_create_handler_iph_malloc_fail),
@@ -199,5 +199,5 @@ int ipcon_create_handler_run(void *)
 
 	};
 
-	cmocka_run_group_tests(tests, NULL, NULL);
+	return cmocka_run_group_tests(tests, NULL, NULL);
 }
