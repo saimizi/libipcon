@@ -17,6 +17,7 @@
 #include "ut.h"
 
 #include "libipcon.h"
+#include "ipcon.h"
 
 extern void *__real_malloc(size_t size);
 
@@ -100,10 +101,9 @@ static void ipcon_create_handler_chan_init_fail(void **state)
 	expect_string(__wrap_strdup, s, peer_name);
 	will_return(__wrap_strdup, strdup_peer_name);
 
-	/* check ipcon_chan_init parameter */
-	will_return(__wrap_ipcon_chan_init, 1);
-	expect_value(__wrap_ipcon_chan_init, iph, iph_mem);
-	will_return(__wrap_ipcon_chan_init, -1);
+	/* Fail ipcon_chan_init() by returning NULL from nl_socket_alloc() */
+	will_return(__wrap_nl_cb_alloc, 0);
+	will_return(__wrap_nl_socket_alloc_cb, 1);
 
 	/* free cloned peer name */
 	will_return(__wrap_free, 1);
@@ -133,8 +133,17 @@ static void ipcon_create_handler_peer_name(void **state)
 	will_return(__wrap_strdup, strdup_peer_name);
 
 	/* check ipcon_chan_init parameter */
-	will_return(__wrap_ipcon_chan_init, 0);
-	will_return(__wrap_ipcon_chan_init, 0);
+	will_return(__wrap_nl_cb_alloc, 0);
+	will_return(__wrap_nl_socket_alloc_cb, 0);
+	expect_value(__wrap_nl_connect, prot, NETLINK_IPCON);
+	will_return(__wrap_nl_connect, 0);
+	will_return(__wrap_nl_send_auto, 0);
+	/* Skip calling cb_valid which does not affect test */
+	will_return(__wrap_nl_recvmsgs_default, 0);
+	/* Set ACK to complete the message receiving loop */
+	will_return(__wrap_nl_recvmsgs_default, 1);
+	will_return(__wrap_nl_recvmsgs_default, NULL);
+	will_return(__wrap_nl_recvmsgs_default, 0);
 
 	IPCON_HANDLER handler = ipcon_create_handler(peer_name, 0);
 
@@ -158,8 +167,17 @@ static void ipcon_create_handler_auto_peer_name(void **state)
 	will_return(__wrap_malloc, name);
 
 	/* check ipcon_chan_init parameter */
-	will_return(__wrap_ipcon_chan_init, 0);
-	will_return(__wrap_ipcon_chan_init, 0);
+	will_return(__wrap_nl_cb_alloc, 0);
+	will_return(__wrap_nl_socket_alloc_cb, 0);
+	expect_value(__wrap_nl_connect, prot, NETLINK_IPCON);
+	will_return(__wrap_nl_connect, 0);
+	will_return(__wrap_nl_send_auto, 0);
+	/* Skip calling cb_valid which does not affect test */
+	will_return(__wrap_nl_recvmsgs_default, 0);
+	/* Set ACK to complete the message receiving loop */
+	will_return(__wrap_nl_recvmsgs_default, 1);
+	will_return(__wrap_nl_recvmsgs_default, NULL);
+	will_return(__wrap_nl_recvmsgs_default, 0);
 
 	IPCON_HANDLER handler = ipcon_create_handler(NULL, 0);
 
