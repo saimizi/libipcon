@@ -73,6 +73,7 @@ jobs:
           cat $COVERAGE_MD
 
       - name: Post Coverage Data to PR
+        if: ${{ github.event_name == 'pull_request' }}
         uses: JoseThen/comment-pr@v1.2.0
         with:
           file_path: "./coverage.md"
