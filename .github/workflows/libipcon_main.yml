@@ -59,15 +59,15 @@ jobs:
           cd build
           COVERAGE_MD="${{ github.workspace }}/coverage.md"
 
-          lcov --capture --directory lib/CMakeFiles/ipcon.dir/ --output-file coverage.info
+          lcov --capture --directory lib/CMakeFiles/ipcon.dir/ --output-file coverage.info --rc lcov_branch_coverage=1
           echo "## Coverage Summary" > $COVERAGE_MD
           echo '```' >> $COVERAGE_MD
-          lcov --remove coverage.info '/usr/include/*' -o coverage.info | tail -n 4 | tee -a $COVERAGE_MD
+          lcov --remove coverage.info '/usr/include/*' -o coverage.info --rc lcov_branch_coverage=1 | tail -n 4 | tee -a $COVERAGE_MD
           echo '```' >> $COVERAGE_MD
 
           echo "## Coverage Detail" >> $COVERAGE_MD
           echo '```' >> $COVERAGE_MD
-          lcov -l coverage.info | sed '1d' | tee -a $COVERAGE_MD
+          lcov -l coverage.info --rc lcov_branch_coverage=1 | sed '1d' | tee -a $COVERAGE_MD
           echo '```' >> $COVERAGE_MD
 
           cat $COVERAGE_MD
