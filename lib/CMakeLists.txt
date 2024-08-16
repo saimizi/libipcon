@@ -3,6 +3,15 @@ if(UNIT_TEST)
 
   # --wrap may fails when using O2/Os
   set(LIBIPCON_CFLAGS "-g -O1")
+  add_definitions(-Dmalloc=_test_malloc -Dfree=_test_free -Dcalloc=test_calloc
+                  -Drealloc=test_realloc)
+
+  if(ENABLE_COVERAGE)
+    if(CMAKE_COMPILER_IS_GNUCC)
+      set(LIBIPCON_CFLAGS "${LIBIPCON_CFLAGS} -fprofile-arcs -ftest-coverage")
+    endif()
+  endif()
+
 else()
   set(LIBIPCON_CFLAGS "-g -O2")
 endif()
@@ -42,6 +51,11 @@ set(LIBIPCON_SOURCE_FILES
 
 if(UNIT_TEST)
   add_library(ipcon STATIC ${LIBIPCON_SOURCE_FILES})
+  if(ENABLE_COVERAGE)
+    if(CMAKE_COMPILER_IS_GNUCC)
+      target_link_libraries(ipcon "-lgcov --coverage")
+    endif()
+  endif()
 else()
   add_library(ipcon SHARED ${LIBIPCON_SOURCE_FILES})
 endif()

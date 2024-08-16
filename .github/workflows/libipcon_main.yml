@@ -35,6 +35,7 @@ jobs:
           sudo apt update
           sudo apt install libnl-genl-3-dev
           sudo apt install cmocka-doc libcmocka-dev libcmocka0
+          sudo apt install lcov
       - name: Check out repository code
         uses: actions/checkout@v4
       - name: Build libipcon unit tests
@@ -44,12 +45,23 @@ jobs:
           mkdir build
           cd build
 
-          cmake -DCMAKE_VERBOSE_MAKEFILE=1 -DUNIT_TEST=ON -DENABLE_NL_MOCK=ON ..
+          cmake -DCMAKE_VERBOSE_MAKEFILE=1 -DUNIT_TEST=ON -DENABLE_NL_MOCK=ON -DENABLE_COVERAGE=ON ..
           make -j 4
       - name: Run libipcon unit tests
         run: |
           cd ${{ github.workspace }}
           cd build
           ./test/ut_ipcon
+
+      - name: Show Coverage Result
+        run: |
+          cd ${{ github.workspace }}
+          cd build
+
+          lcov --capture --directory lib/CMakeFiles/ipcon.dir/ --output-file coverage.info
+          lcov --remove coverage.info '/usr/include/*' -o coverage.info | tail -n 4
+          lcov -l coverage.info | sed '1d'
+
+
 
       - run: echo "🍏 This job's status is ${{ job.status }}."
