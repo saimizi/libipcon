@@ -1,4 +1,4 @@
-project('libipcon', 'c', default_options : ['warning_level=3', 'optimization=2'])
+project('libipcon', 'c', version: '0.0.1', default_options : ['warning_level=3', 'optimization=2'])
 
 unit_test = get_option('unit_test')
 build_logger = get_option('build_logger')
