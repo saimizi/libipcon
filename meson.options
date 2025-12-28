@@ -1,5 +1,0 @@
-option('build_logger', type: 'boolean', value: false, description: 'Build ipcon logger',)
-option('build_sample', type: 'boolean', value: false, description: 'Build ipcon samples',)
-option('unit_test', type: 'boolean', value: false, description: 'Build ipcon unit test',)
-option('enable_coverage', type: 'boolean', value: false, description: 'Build coverage in unit test',)
-option('enable_nl_mock', type: 'boolean', value: false, description: 'Build coverage with libnl-genl mock',)
