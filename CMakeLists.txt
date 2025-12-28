@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.10)
 
-project(libipcon VERSION 0.0.1)
+project(libipcon VERSION 0.1.0)
 
 # Enable cmake makefile debug
 set(CMAKE_VERBOSE_MAKEFILE ON)

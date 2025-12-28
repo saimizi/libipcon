@@ -64,3 +64,15 @@ target_link_libraries(ipcon ${LIBNL_GENL_LIBRARIES})
 set_target_properties(ipcon PROPERTIES VERSION ${CMAKE_PROJECT_VERSION}
                                        SOVERSION ${PROJECT_VERSION_MAJOR})
 target_include_directories(ipcon PUBLIC ${LIBIPCON_INCLUDE_DIR})
+
+# Installation rules
+install(TARGETS ipcon
+  LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
+  ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR})
+
+install(FILES
+  libipcon.h
+  libipcon_priv.h
+  libipcon_dbg.h
+  util.h
+  DESTINATION ${CMAKE_INSTALL_INCLUDEDIR})
