@@ -88,13 +88,18 @@ jobs:
 
           ## Installation
 
-          ### Debian/Ubuntu
+          ### Debian/Ubuntu (24.04+)
+
+          **Note:** The Debian package is built for **Ubuntu 24.04 (Noble Numbat) and later versions**. It depends on \`libnl-genl-3-200\` which is available in Ubuntu 24.04+. For older Ubuntu versions (22.04, 20.04), please install from source.
+
           \`\`\`bash
-          sudo dpkg -i libipcon_${VERSION}_amd64.deb
-          sudo apt-get install -f
+          sudo apt install ./libipcon_${VERSION}_amd64.deb
           \`\`\`
 
           ### From Source
+
+          For all Linux distributions and older Ubuntu versions:
+
           \`\`\`bash
           tar -xzf libipcon-${VERSION}.tar.gz
           cd libipcon-${VERSION}
@@ -152,7 +157,7 @@ jobs:
             --url "https://github.com/saimizi/libipcon" \
             --license "LGPL-2.1" \
             --maintainer "saimizi" \
-            --depends "libnl-genl-3-0" \
+            --depends "libnl-genl-3-200" \
             --category libs \
             --deb-priority optional \
             -C build/install \
