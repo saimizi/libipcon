@@ -1,0 +1,5 @@
+.github export-ignore
+.gitignore export-ignore
+.gitattributes export-ignore
+.requirements export-ignore
+test/mocklib export-ignore

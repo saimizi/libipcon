@@ -1,0 +1,178 @@
+name: Release
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'CMakeLists.txt'
+
+permissions:
+  contents: write
+
+jobs:
+  check-version:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.extract.outputs.version }}
+      should_release: ${{ steps.check.outputs.should_release }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Extract version from CMakeLists.txt
+        id: extract
+        run: |
+          VERSION=$(grep -Po 'project\(libipcon\s+VERSION\s+\K[0-9]+\.[0-9]+\.[0-9]+' CMakeLists.txt)
+          if [ -z "$VERSION" ]; then
+            echo "Error: Failed to extract version from CMakeLists.txt"
+            exit 1
+          fi
+          echo "version=${VERSION}" >> $GITHUB_OUTPUT
+          echo "Extracted version: ${VERSION}"
+
+      - name: Check if release needed
+        id: check
+        run: |
+          VERSION="${{ steps.extract.outputs.version }}"
+          if git rev-parse "v${VERSION}" >/dev/null 2>&1; then
+            echo "Tag v${VERSION} already exists, skipping release"
+            echo "should_release=false" >> $GITHUB_OUTPUT
+          else
+            echo "New version detected: v${VERSION}"
+            echo "should_release=true" >> $GITHUB_OUTPUT
+          fi
+
+  create-release:
+    needs: check-version
+    if: needs.check-version.outputs.should_release == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libnl-genl-3-dev \
+            cmake \
+            build-essential \
+            ruby \
+            ruby-dev \
+            rubygems
+          sudo gem install --no-document fpm
+
+      - name: Generate changelog
+        id: changelog
+        run: |
+          VERSION="${{ needs.check-version.outputs.version }}"
+          PREV_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "")
+
+          if [ -z "$PREV_TAG" ]; then
+            echo "First release - generating full changelog"
+            COMMITS=$(git log --pretty=format:"- %s (%h)" --no-merges)
+          else
+            echo "Generating changelog from ${PREV_TAG}"
+            COMMITS=$(git log ${PREV_TAG}..HEAD --pretty=format:"- %s (%h)" --no-merges)
+          fi
+
+          cat > changelog.md << EOF
+          ## Changes
+
+          ${COMMITS}
+
+          ## Installation
+
+          ### Debian/Ubuntu
+          \`\`\`bash
+          sudo dpkg -i libipcon_${VERSION}_amd64.deb
+          sudo apt-get install -f
+          \`\`\`
+
+          ### From Source
+          \`\`\`bash
+          tar -xzf libipcon-${VERSION}.tar.gz
+          cd libipcon-${VERSION}
+          mkdir build && cd build
+          cmake ..
+          make
+          sudo make install
+          \`\`\`
+          EOF
+
+          echo "Changelog generated:"
+          cat changelog.md
+
+      - name: Create source tarball
+        run: |
+          VERSION="${{ needs.check-version.outputs.version }}"
+          git archive --format=tar.gz \
+            --prefix=libipcon-${VERSION}/ \
+            -o libipcon-${VERSION}.tar.gz \
+            HEAD
+
+          echo "Tarball created:"
+          ls -lh libipcon-${VERSION}.tar.gz
+
+          echo "Verifying tarball contents:"
+          tar -tzf libipcon-${VERSION}.tar.gz | head -20
+
+      - name: Build project and create Debian package
+        run: |
+          VERSION="${{ needs.check-version.outputs.version }}"
+
+          mkdir build && cd build
+          cmake -DCMAKE_INSTALL_PREFIX=/usr \
+                -DCMAKE_VERBOSE_MAKEFILE=1 \
+                -DUNIT_TEST=OFF \
+                ..
+          make -j $(nproc)
+
+          if [ ! -f lib/libipcon.so ]; then
+            echo "Error: Library not built"
+            exit 1
+          fi
+
+          make DESTDIR=$PWD/install install
+
+          echo "Installed files:"
+          find install -type f
+
+          cd ..
+          fpm -s dir -t deb \
+            -n libipcon \
+            -v ${VERSION} \
+            -a amd64 \
+            --description "LIBIPCON - High-performance IPC over Netlink" \
+            --url "https://github.com/saimizi/libipcon" \
+            --license "LGPL-2.1" \
+            --maintainer "saimizi" \
+            --depends "libnl-genl-3-0" \
+            --category libs \
+            --deb-priority optional \
+            -C build/install \
+            usr
+
+          echo "Debian package created:"
+          ls -lh *.deb
+
+          dpkg-deb -c libipcon_${VERSION}_amd64.deb
+
+      - name: Create GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          VERSION="${{ needs.check-version.outputs.version }}"
+
+          gh release create "v${VERSION}" \
+            --title "v${VERSION}" \
+            --notes-file changelog.md \
+            libipcon-${VERSION}.tar.gz \
+            libipcon_${VERSION}_amd64.deb
+
+          echo "Release v${VERSION} created successfully!"
