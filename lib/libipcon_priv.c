@@ -151,8 +151,9 @@ static inline int ipcon_chan_init_one(struct ipcon_peer_handler *iph,
 void *ipconmsg_put(struct nl_msg *msg, struct ipcon_channel *ic,
 		   enum ipcon_msg_type type, int flags)
 {
-	return nlmsg_put(msg, NL_AUTO_PORT, NL_AUTO_SEQ, type, IPCONMSG_HDRLEN,
-			 flags | NLM_F_REQUEST);
+	(void)ic;
+	return nlmsg_put(msg, NL_AUTO_PORT, NL_AUTO_SEQ, (int)type,
+			 IPCONMSG_HDRLEN, flags | NLM_F_REQUEST);
 };
 
 int ipcon_parse(struct nl_msg *msg, struct nlattr *tb[], int maxtype,
@@ -204,6 +205,7 @@ static int ipcon_cb_ack(struct nl_msg *msg, void *arg)
 {
 	struct ipconmsg_result *ir = arg;
 
+	(void)msg;
 	assert(ir);
 	ir->flags |= IR_FLG_ACK_OK;
 

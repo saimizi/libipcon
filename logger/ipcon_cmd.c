@@ -13,16 +13,15 @@
  * See the GNU Lesser General Public License for more details.
  */
 
-
 #include <stdio.h>
 #include <stdlib.h>
+#include <unistd.h>
 #include <netlink/netlink.h>
 #include <netlink/socket.h>
 #include <netlink/genl/genl.h>
 #include <netlink/genl/ctrl.h>
 #include <unistd.h>
 #include <pthread.h>
-#include <errno.h>
 #include <string.h>
 #include <assert.h>
 
@@ -74,10 +73,9 @@ int main(int argc, char *argv[])
 {
 	int ret = 0;
 	int c;
-	IPCON_HANDLER handler;
+	IPCON_HANDLER handler = NULL;
 	char *peer = NULL;
 	char *msg = NULL;
-	unsigned long flag = 0;
 
 	do {
 		unsigned long flag = 0;

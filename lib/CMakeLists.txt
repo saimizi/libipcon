@@ -32,11 +32,11 @@ set(LIBIPCON_CFLAGS
     -D_FORTIFY_SOURCE=2 \
     -ftrapv \
     -fstack-protector \
-    -rdynamic \
     -funwind-tables")
 
 set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${LIBIPCON_CFLAGS}")
 set(CMAKE_SHARED_LINKER_FLAGS "${CMAKE_SHARED_LINKER_FLAGS} \
+	-rdynamic \
 	-Wl,--version-script,${CMAKE_CURRENT_SOURCE_DIR}/ipcon.map")
 
 set(LIBIPCON_INCLUDE_DIR
