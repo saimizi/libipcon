@@ -13,7 +13,6 @@
  * See the GNU Lesser General Public License for more details.
  */
 
-
 #include <stdlib.h>
 #include "util.h"
 

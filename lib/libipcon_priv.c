@@ -13,7 +13,6 @@
  * See the GNU Lesser General Public License for more details.
  */
 
-
 #include <stdint.h>
 #include <pthread.h>
 #include <errno.h>
