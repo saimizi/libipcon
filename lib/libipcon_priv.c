@@ -270,9 +270,9 @@ redo:
 int ipcon_chan_init(struct ipcon_peer_handler *iph)
 {
 	int ret = 0;
+	struct nl_msg *msg = NULL;
 
 	do {
-		struct nl_msg *msg = NULL;
 		void *p = NULL;
 		uint32_t ipcon_flag = 0;
 
@@ -344,6 +344,8 @@ int ipcon_chan_init(struct ipcon_peer_handler *iph)
 
 	} while (0);
 
+	nlmsg_free(msg);
+
 	if (ret < 0) {
 		ipcon_chan_destory(&iph->c_chan);
 		ipcon_chan_destory(&iph->s_chan);
@@ -359,8 +361,8 @@ void ipcon_chan_destory(struct ipcon_channel *ic)
 		return;
 
 	if (ic->sk) {
-		nl_close(ic->sk);
-		ic->sk = 0;
+		nl_socket_free(ic->sk);
+		ic->sk = NULL;
 	}
 
 	if (ic->mutex_initialized) {
