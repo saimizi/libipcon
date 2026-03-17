@@ -13,8 +13,7 @@
  * See the GNU Lesser General Public License for more details.
  */
 
-
-#include "ut.h"
+#include <unistd.h>
 extern int ipcon_create_handler_run(void *);
 
 int main(void)
