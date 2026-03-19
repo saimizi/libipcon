@@ -13,7 +13,6 @@
  * See the GNU Lesser General Public License for more details.
  */
 
-
 #include <stdlib.h>
 #include "util.h"
 
@@ -81,6 +80,8 @@ void *le_remove(struct link_entry *le)
 
 	le->head = NULL;
 	le->prev = le->next = le;
+
+	return NULL;
 }
 
 struct link_entry_head *le_gethead(struct link_entry *le)

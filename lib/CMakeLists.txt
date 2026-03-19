@@ -7,7 +7,7 @@ if(UNIT_TEST)
                   -Drealloc=test_realloc)
 
   if(ENABLE_COVERAGE)
-    if(CMAKE_COMPILER_IS_GNUCC)
+    if(CMAKE_COMPILER_IS_GNUCC OR CMAKE_C_COMPILER_ID MATCHES "Clang")
       set(LIBIPCON_CFLAGS "${LIBIPCON_CFLAGS} -fprofile-arcs -ftest-coverage")
     endif()
   endif()
@@ -32,11 +32,11 @@ set(LIBIPCON_CFLAGS
     -D_FORTIFY_SOURCE=2 \
     -ftrapv \
     -fstack-protector \
-    -rdynamic \
     -funwind-tables")
 
 set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${LIBIPCON_CFLAGS}")
 set(CMAKE_SHARED_LINKER_FLAGS "${CMAKE_SHARED_LINKER_FLAGS} \
+	-rdynamic \
 	-Wl,--version-script,${CMAKE_CURRENT_SOURCE_DIR}/ipcon.map")
 
 set(LIBIPCON_INCLUDE_DIR
@@ -52,8 +52,8 @@ set(LIBIPCON_SOURCE_FILES
 if(UNIT_TEST)
   add_library(ipcon STATIC ${LIBIPCON_SOURCE_FILES})
   if(ENABLE_COVERAGE)
-    if(CMAKE_COMPILER_IS_GNUCC)
-      target_link_libraries(ipcon "-lgcov --coverage")
+    if(CMAKE_COMPILER_IS_GNUCC OR CMAKE_C_COMPILER_ID MATCHES "Clang")
+      target_link_libraries(ipcon "--coverage")
     endif()
   endif()
 else()

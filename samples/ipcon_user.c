@@ -46,7 +46,7 @@ int srv_group_connected;
 IPCON_HANDLER user_h;
 #define MYNAME (user_h ? ipcon_selfname(user_h) : "ANON")
 
-void ipcon_user_grp_cb(char *peer_name, char *group_name, void *buf, size_t len,
+void ipcon_user_grp_cb(char *peer_name, char *group_name, void *buf, uint32_t len,
 		       void *data)
 {
 	struct ts_msg *tm = NULL;

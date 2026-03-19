@@ -13,7 +13,6 @@
  * See the GNU Lesser General Public License for more details.
  */
 
-
 #include <stdio.h>
 #include <stdlib.h>
 #include <netlink/netlink.h>
@@ -23,7 +22,6 @@
 #include <unistd.h>
 #include <pthread.h>
 #include <semaphore.h>
-#include <errno.h>
 #include <string.h>
 #include <assert.h>
 #include <jslist.h>
@@ -79,8 +77,8 @@ void *group_sender(void *para)
 		gs_unlock();
 
 		struct list_node *it;
-		while (ge = LIST_POP(&local_event_queue, struct gs_event, node,
-				     it)) {
+		while ((ge = LIST_POP(&local_event_queue, struct gs_event, node,
+				      it))) {
 			if (ge->msg.type == LIBIPCON_NORMAL_MSG) {
 				ipcon_info("LIBIPCON_NORMAL_MSG\n");
 				sprintf(gs_buf, "%s : %s\n", ge->msg.peer,

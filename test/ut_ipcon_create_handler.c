@@ -201,6 +201,14 @@ static void ipcon_create_handler_auto_peer_name(void **state)
 	assert_non_null(iph);
 	assert_true(!strncmp(iph->name, "Anon-", 5));
 	assert_true(iph->flags & IPH_FLG_ANON_PEER);
+
+	/* free name (stack-allocated via mock) */
+	will_return(__wrap__test_free, true);
+	will_return(__wrap__test_free, name);
+	/* free iph (stack-allocated via mock) */
+	will_return(__wrap__test_free, true);
+	will_return(__wrap__test_free, iph_mem);
+	ipcon_free_handler(handler);
 }
 
 int ipcon_create_handler_run(void *state)

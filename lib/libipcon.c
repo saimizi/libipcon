@@ -36,43 +36,70 @@
 static inline void default_normal_msg_cb(char *peer_name, void *buf,
 					 uint32_t len, void *data)
 {
+	(void)peer_name;
+	(void)buf;
+	(void)len;
+	(void)data;
 }
 
 static inline void default_group_msg_cb(char *peer_name, char *group_name,
 					void *buf, uint32_t len, void *data)
 {
+	(void)peer_name;
+	(void)group_name;
+	(void)buf;
+	(void)len;
+	(void)data;
 }
 
 static inline void default_peer_add(char *peer_name, void *data)
 {
+	(void)peer_name;
+	(void)data;
 }
 
 static inline void default_peer_remove(char *peer_name, void *data)
 {
+	(void)peer_name;
+	(void)data;
 }
 
 static inline void default_group_add(char *peer_name, char *group_name,
 				     void *data)
 {
+	(void)peer_name;
+	(void)group_name;
+	(void)data;
 }
 
 static inline void default_group_remove(char *peer_name, char *group_name,
 					void *data)
 {
+	(void)peer_name;
+	(void)group_name;
+	(void)data;
 }
 
 static inline void default_auto_group_join(char *peer_name, char *group_name,
 					   void *data)
 {
+	(void)peer_name;
+	(void)group_name;
+	(void)data;
 }
 
 static inline void default_auto_group_leave(char *peer_name, char *group_name,
 					    void *data)
 {
+	(void)peer_name;
+	(void)group_name;
+	(void)data;
 }
 
 static inline void default_rcv_msg_error(int error, void *data)
 {
+	(void)error;
+	(void)data;
 }
 
 void __attribute__((constructor)) libipcon_init(void)
@@ -929,7 +956,7 @@ static int async_kevent_msg(struct ipcon_peer_handler *iph,
 
 	do {
 		struct async_rcv_ctl *arc = iph->arc;
-		struct libipcon_kevent *ik = (struct libipcon_kevent *)im->buf;
+		struct libipcon_kevent *ik = &im->kevent;
 		int i;
 
 		if (search_peer_group(arc, ik))
@@ -963,7 +990,7 @@ static inline void auto_kevent(struct ipcon_peer_handler *iph,
 			       struct ipcon_msg *im)
 {
 	int ret = 0;
-	struct libipcon_kevent *ik = (struct libipcon_kevent *)im->buf;
+	struct libipcon_kevent *ik = &im->kevent;
 	struct async_rcv_ctl *arc = iph->arc;
 	int i;
 

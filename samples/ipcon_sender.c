@@ -80,7 +80,7 @@ static void ipcon_sender_peer_remove(char *peer_name, void *data)
 	ipcon_info("Detected service %s removed.\n", SRV_NAME);
 }
 
-static void ipcon_sender_normal_msg(char *peer_name, void *buf, size_t len,
+static void ipcon_sender_normal_msg(char *peer_name, void *buf, uint32_t len,
 				    void *data)
 {
 	IPCON_HANDLER handler = data;

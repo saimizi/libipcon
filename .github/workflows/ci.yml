@@ -45,7 +45,7 @@ jobs:
           mkdir build
           cd build
 
-          cmake -DCMAKE_VERBOSE_MAKEFILE=1 -DUNIT_TEST=ON -DENABLE_NL_MOCK=ON -DENABLE_COVERAGE=ON ..
+          cmake -DCMAKE_C_COMPILER=gcc -DCMAKE_VERBOSE_MAKEFILE=1 -DUNIT_TEST=ON -DENABLE_NL_MOCK=ON -DENABLE_COVERAGE=ON ..
           make -j 4
       - name: Run libipcon unit tests
         run: |
