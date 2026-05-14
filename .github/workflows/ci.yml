@@ -17,7 +17,8 @@ jobs:
       - name: Check formatting
         run: |
           failed=0
-          for f in $(find . -name "*.c" -o -name "*.h"); do
+          for f in $(find . -name "*.c" -o -name "*.h" \
+            -not -path "./.git/*" -not -path "./test/mocklib/*" -not -path "./samples/jsutils/*"); do
             if ! clang-format --dry-run --Werror "$f" 2>/dev/null; then
               echo "❌ $f is misformatted"
               failed=$((failed+1))
