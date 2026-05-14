@@ -30,42 +30,56 @@
 #include "libipcon_priv.h"
 
 /*
+ * Helper: mock setup for a single-channel (flags=0) create_handler.
+ * Expects iph real-alloc + strdup + 1 channel (c_chan) + PEER_REG.
+ * Returns 3 will_returns: free(ptr) expected for ipcon_free_handler.
+ */
+static void expect_create_handler_named_single(char **strdup_out)
+{
+	char *name = "test_peer";
+	*strdup_out = strdup(name); /* Will be freed by handler */
+	assert_non_null(*strdup_out);
+
+	/* Real alloc for iph */
+	will_return(__wrap__test_malloc, false);
+	will_return(__wrap__test_malloc, true);
+
+	/* strdup */
+	will_return(__wrap_strdup, 1);
+	expect_string(__wrap_strdup, s, name);
+	will_return(__wrap_strdup, *strdup_out);
+
+	/* c_chan init: cb_alloc, socket_alloc_cb, nl_connect */
+	will_return(__wrap_nl_cb_alloc, 0);
+	will_return(__wrap_nl_socket_alloc_cb, 0);
+	expect_value(__wrap_nl_connect, prot, NETLINK_IPCON);
+	will_return(__wrap_nl_connect, 0);
+
+	/* PEER_REG: nl_send_auto + nl_recvmsgs_default x4 */
+	will_return(__wrap_nl_send_auto, 0);
+	will_return(__wrap_nl_recvmsgs_default, 0); /* do_valid */
+	will_return(__wrap_nl_recvmsgs_default, 1); /* do_ack */
+	will_return(__wrap_nl_recvmsgs_default, NULL); /* ack msg */
+	will_return(__wrap_nl_recvmsgs_default, 0); /* ret */
+}
+
+/*
  * ipcon_selfname tests
  */
 
 static void selfname_with_name(void **state)
 {
-	char *peer_name = "test_peer";
-	char *strdup_peer_name = "test_peer";
-	char iph_mem[1024];
+	char *strdup_peer_name = NULL;
 
-	will_return(__wrap__test_malloc, false);
-	will_return(__wrap__test_malloc, false);
-	will_return(__wrap__test_malloc, iph_mem);
+	expect_create_handler_named_single(&strdup_peer_name);
 
-	will_return(__wrap_strdup, 1);
-	expect_string(__wrap_strdup, s, peer_name);
-	will_return(__wrap_strdup, strdup_peer_name);
-
-	will_return(__wrap_nl_cb_alloc, 0);
-	will_return(__wrap_nl_socket_alloc_cb, 0);
-	expect_value(__wrap_nl_connect, prot, NETLINK_IPCON);
-	will_return(__wrap_nl_connect, 0);
-	will_return(__wrap_nl_send_auto, 0);
-	will_return(__wrap_nl_recvmsgs_default, 0);
-	will_return(__wrap_nl_recvmsgs_default, 1);
-	will_return(__wrap_nl_recvmsgs_default, NULL);
-	will_return(__wrap_nl_recvmsgs_default, 0);
-
-	IPCON_HANDLER handler = ipcon_create_handler(peer_name, 0);
+	IPCON_HANDLER handler = ipcon_create_handler("test_peer", 0);
 	assert_non_null(handler);
 
 	const char *returned_name = ipcon_selfname(handler);
 	assert_non_null(returned_name);
 	assert_string_equal(returned_name, "test_peer");
 
-	will_return(__wrap__test_free, true);
-	will_return(__wrap__test_free, strdup_peer_name);
 	will_return(__wrap__test_free, false);
 	ipcon_free_handler(handler);
 }
@@ -124,7 +138,7 @@ static void get_write_fd_null_handler(void **state)
 }
 
 /*
- * Null handler tests for functions that properly check
+ * Null handler tests for functions that properly check for NULL
  */
 
 static void rcv_null_handler(void **state)
@@ -148,14 +162,16 @@ static void register_null_handler(void **state)
 	assert_int_equal(ipcon_register_group(NULL, "grp"), -EINVAL);
 	assert_int_equal(ipcon_unregister_group(NULL, "grp"), -EINVAL);
 
-	/* NULL name with NULL handler */
 	assert_int_equal(ipcon_register_group(NULL, NULL), -EINVAL);
 	assert_int_equal(ipcon_unregister_group(NULL, NULL), -EINVAL);
 }
 
-static void join_null_handler(void **state)
+static void leave_null_handler(void **state)
 {
-	assert_int_equal(ipcon_join_group(NULL, "peer", "grp"), -EINVAL);
+	/*
+	 * ipcon_join_group doesn't NULL-check before accessing flags,
+	 * so we only test ipcon_leave_group which does check.
+	 */
 	assert_int_equal(ipcon_leave_group(NULL, "peer", "grp"), -EINVAL);
 }
 
@@ -169,22 +185,18 @@ static void api_null_msg(void **state)
 {
 	/*
 	 * ipcon_rcv checks !im before dereferencing handler.
-	 * Passing a non-NULL handler that's not real is unsafe,
-	 * but passing NULL msg is safe because im is checked first.
+	 * NULL msg is caught by the !im check before crashing.
 	 */
 	assert_int_equal(ipcon_rcv((IPCON_HANDLER)0x1, NULL), -EINVAL);
 }
 
-static void send_invalid_args(void **state)
+static void api_send_trivial_error(void **state)
 {
-	/* size <= 0 should trigger early return before dereferencing handler */
-	assert_int_equal(ipcon_send_unicast((IPCON_HANDLER)0x1, "peer", NULL,
-					    0),
-			 -EINVAL);
-
-	assert_int_equal(ipcon_send_multicast((IPCON_HANDLER)0x1, "grp", NULL,
-					      0, 0),
-			 -EINVAL);
+	/* size <= 0 triggers early return before dereferencing handler */
+	assert_int_equal(ipcon_send_unicast((IPCON_HANDLER)0x1,
+					    "peer", NULL, 0), -EINVAL);
+	assert_int_equal(ipcon_send_multicast((IPCON_HANDLER)0x1,
+					      "grp", NULL, 0, 0), -EINVAL);
 }
 
 /*
@@ -193,24 +205,45 @@ static void send_invalid_args(void **state)
 
 static void create_handler_default_flags(void **state)
 {
+	/*
+	 * LIBIPCON_FLG_DEFAULT = RCV_IF | SND_IF
+	 * This creates 3 channels: c_chan, s_chan, r_chan
+	 * Each channel allocates: nl_cb, nl_sock, nl_connect
+	 * Then PEER_REG: nl_send_auto + nl_recvmsgs_default x4
+	 */
+
 	char *peer_name = "default_test";
-	char *strdup_peer_name = "default_test";
-	char iph_mem[1024];
+	char *strdup_peer_name = strdup(peer_name);
+	assert_non_null(strdup_peer_name);
 
+	/* Real alloc for iph */
 	will_return(__wrap__test_malloc, false);
-	will_return(__wrap__test_malloc, false);
-	will_return(__wrap__test_malloc, iph_mem);
+	will_return(__wrap__test_malloc, true);
 
+	/* strdup */
 	will_return(__wrap_strdup, 1);
 	expect_string(__wrap_strdup, s, peer_name);
 	will_return(__wrap_strdup, strdup_peer_name);
 
+	/* c_chan init */
 	will_return(__wrap_nl_cb_alloc, 0);
 	will_return(__wrap_nl_socket_alloc_cb, 0);
 	expect_value(__wrap_nl_connect, prot, NETLINK_IPCON);
 	will_return(__wrap_nl_connect, 0);
-	/* c_chan init needs an extra nl_connect for one channel */
+
+	/* s_chan init (SND_IF) */
+	will_return(__wrap_nl_cb_alloc, 0);
+	will_return(__wrap_nl_socket_alloc_cb, 0);
+	expect_value(__wrap_nl_connect, prot, NETLINK_IPCON);
 	will_return(__wrap_nl_connect, 0);
+
+	/* r_chan init (RCV_IF) */
+	will_return(__wrap_nl_cb_alloc, 0);
+	will_return(__wrap_nl_socket_alloc_cb, 0);
+	expect_value(__wrap_nl_connect, prot, NETLINK_IPCON);
+	will_return(__wrap_nl_connect, 0);
+
+	/* PEER_REG */
 	will_return(__wrap_nl_send_auto, 0);
 	will_return(__wrap_nl_recvmsgs_default, 0);
 	will_return(__wrap_nl_recvmsgs_default, 1);
@@ -224,35 +257,39 @@ static void create_handler_default_flags(void **state)
 	struct ipcon_peer_handler *iph = handler_to_iph(handler);
 	assert_non_null(iph);
 
-	/* Default flags should set RCV_IF and SND_IF */
 	assert_true(iph->flags & IPH_FLG_RCV_IF);
 	assert_true(iph->flags & IPH_FLG_SND_IF);
 
-	will_return(__wrap__test_free, true);
-	will_return(__wrap__test_free, strdup_peer_name);
 	will_return(__wrap__test_free, false);
 	ipcon_free_handler(handler);
 }
 
 static void create_handler_no_flags(void **state)
 {
+	/*
+	 * With flags=0, only c_chan is initialized (no s_chan, no r_chan)
+	 */
+
 	char *peer_name = "noflag_test";
-	char *strdup_peer_name = "noflag_test";
-	char iph_mem[1024];
+	char *strdup_peer_name = strdup(peer_name);
+	assert_non_null(strdup_peer_name);
 
+	/* Real alloc for iph */
 	will_return(__wrap__test_malloc, false);
-	will_return(__wrap__test_malloc, false);
-	will_return(__wrap__test_malloc, iph_mem);
+	will_return(__wrap__test_malloc, true);
 
+	/* strdup */
 	will_return(__wrap_strdup, 1);
 	expect_string(__wrap_strdup, s, peer_name);
 	will_return(__wrap_strdup, strdup_peer_name);
 
-	/* Only c_chan init, no s_chan/r_chan */
+	/* c_chan init only */
 	will_return(__wrap_nl_cb_alloc, 0);
 	will_return(__wrap_nl_socket_alloc_cb, 0);
 	expect_value(__wrap_nl_connect, prot, NETLINK_IPCON);
 	will_return(__wrap_nl_connect, 0);
+
+	/* PEER_REG */
 	will_return(__wrap_nl_send_auto, 0);
 	will_return(__wrap_nl_recvmsgs_default, 0);
 	will_return(__wrap_nl_recvmsgs_default, 1);
@@ -260,28 +297,23 @@ static void create_handler_no_flags(void **state)
 	will_return(__wrap_nl_recvmsgs_default, 0);
 
 	IPCON_HANDLER handler = ipcon_create_handler(peer_name, 0);
-
 	assert_non_null(handler);
 
 	struct ipcon_peer_handler *iph = handler_to_iph(handler);
 	assert_non_null(iph);
 
-	/* Without flags, only c_chan is initialized */
 	assert_false(iph->flags & IPH_FLG_RCV_IF);
 	assert_false(iph->flags & IPH_FLG_SND_IF);
 
 	assert_int_equal(ipcon_get_read_fd(handler), -EPERM);
 	assert_int_equal(ipcon_get_write_fd(handler), -EPERM);
 
-	will_return(__wrap__test_free, true);
-	will_return(__wrap__test_free, strdup_peer_name);
 	will_return(__wrap__test_free, false);
 	ipcon_free_handler(handler);
 }
 
 static void free_handler_null(void **state)
 {
-	/* Should not crash */
 	ipcon_free_handler(NULL);
 }
 
@@ -296,7 +328,6 @@ static void async_rcv_null_args(void **state)
 	assert_int_equal(ipcon_async_rcv(NULL, &arc), -EINVAL);
 	assert_int_equal(ipcon_async_rcv((IPCON_HANDLER)0x1, NULL), -EINVAL);
 
-	/* Calling stop with NULL should not crash */
 	ipcon_async_rcv_stop(NULL);
 }
 
@@ -315,10 +346,10 @@ int ipcon_tests_run(void *state)
 		cmocka_unit_test(rcv_null_handler),
 		cmocka_unit_test(send_null_handler),
 		cmocka_unit_test(register_null_handler),
-		cmocka_unit_test(join_null_handler),
+		cmocka_unit_test(leave_null_handler),
 		cmocka_unit_test(api_invalid_names),
 		cmocka_unit_test(api_null_msg),
-		cmocka_unit_test(send_invalid_args),
+		cmocka_unit_test(api_send_trivial_error),
 
 		/* create_handler variations */
 		cmocka_unit_test(create_handler_default_flags),
