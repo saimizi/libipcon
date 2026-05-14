@@ -178,12 +178,13 @@ static void api_null_msg(void **state)
 static void send_invalid_args(void **state)
 {
 	/* size <= 0 should trigger early return before dereferencing handler */
-	assert_int_equal(ipcon_send_unicast((IPCON_HANDLER)0x1, "peer", NULL, 0),
+	assert_int_equal(ipcon_send_unicast((IPCON_HANDLER)0x1, "peer", NULL,
+					    0),
 			 -EINVAL);
 
-	assert_int_equal(
-		ipcon_send_multicast((IPCON_HANDLER)0x1, "grp", NULL, 0, 0),
-		-EINVAL);
+	assert_int_equal(ipcon_send_multicast((IPCON_HANDLER)0x1, "grp", NULL,
+					      0, 0),
+			 -EINVAL);
 }
 
 /*
@@ -216,8 +217,8 @@ static void create_handler_default_flags(void **state)
 	will_return(__wrap_nl_recvmsgs_default, NULL);
 	will_return(__wrap_nl_recvmsgs_default, 0);
 
-	IPCON_HANDLER handler = ipcon_create_handler(peer_name,
-						      LIBIPCON_FLG_DEFAULT);
+	IPCON_HANDLER handler =
+		ipcon_create_handler(peer_name, LIBIPCON_FLG_DEFAULT);
 	assert_non_null(handler);
 
 	struct ipcon_peer_handler *iph = handler_to_iph(handler);

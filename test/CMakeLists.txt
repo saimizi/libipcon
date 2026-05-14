@@ -26,18 +26,4 @@ if(ENABLE_COVERAGE)
   endif()
 endif()
 
-# Per-module test targets (for focused testing)
-set(UT_CREATE_HANDLER_SOURCES ut_main.c ut_ipcon_create_handler.c)
-add_executable(ut_ipcon_create_handler ${UT_CREATE_HANDLER_SOURCES})
-target_link_libraries(ut_ipcon_create_handler cmocka wrap_symbols ipcon)
-target_include_directories(ut_ipcon_create_handler PUBLIC ${LIBIPCON_INCLUDE})
 
-set(UT_IPCORE_SOURCES ut_main.c ut_ipcon.c)
-add_executable(ut_ipcon_core ${UT_IPCORE_SOURCES})
-target_link_libraries(ut_ipcon_core cmocka wrap_symbols ipcon)
-target_include_directories(ut_ipcon_core PUBLIC ${LIBIPCON_INCLUDE})
-
-set(UT_API_SOURCES ut_main.c ut_ipcon_api.c)
-add_executable(ut_ipcon_api ${UT_API_SOURCES})
-target_link_libraries(ut_ipcon_api cmocka wrap_symbols ipcon)
-target_include_directories(ut_ipcon_api PUBLIC ${LIBIPCON_INCLUDE})

@@ -13,7 +13,6 @@
  * See the GNU Lesser General Public License for more details.
  */
 
-
 #ifndef __UTIL_H__
 #define __UTIL_H__
 #include <linux/types.h>
@@ -28,7 +27,6 @@ struct link_entry_head {
 	struct link_entry le;
 	__u32 cnt;
 };
-
 
 #define LINK_ENTRY(a) ((struct link_entry *)a)
 #define LINK_ENTRY_HEAD(a) ((struct link_entry_head *)a)

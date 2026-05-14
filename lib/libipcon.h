@@ -20,7 +20,7 @@
 #include <string.h>
 #include <stdint.h>
 
-#define IPCON_HANDLER	void *
+#define IPCON_HANDLER void *
 
 enum libipcon_msg_type {
 	LIBIPCON_NORMAL_MSG,
@@ -29,19 +29,16 @@ enum libipcon_msg_type {
 	LIBIPCON_INVALID_MSG,
 };
 
+#define LIBIPCON_KERNEL_NAME "ipcon"
+#define LIBIPCON_KERNEL_GROUP_NAME "ipcon_kevent"
+#define LIBIPCON_MAX_PAYLOAD_LEN 2048
+#define LIBIPCON_MAX_NAME_LEN 32
+#define LIBIPCON_MAX_USR_GROUP 5
 
-#define LIBIPCON_KERNEL_NAME		"ipcon"
-#define LIBIPCON_KERNEL_GROUP_NAME	"ipcon_kevent"
-#define LIBIPCON_MAX_PAYLOAD_LEN	2048
-#define LIBIPCON_MAX_NAME_LEN		32
-#define LIBIPCON_MAX_USR_GROUP		5
-
-#define LIBIPCON_FLG_DISABLE_KEVENT_FILTER	(1UL << 0)
-#define LIBIPCON_FLG_USE_RCV_IF			(1UL << 1)
-#define LIBIPCON_FLG_USE_SND_IF			(1UL << 2)
-#define LIBIPCON_FLG_DEFAULT	\
-	(LIBIPCON_FLG_USE_RCV_IF | LIBIPCON_FLG_USE_SND_IF)
-
+#define LIBIPCON_FLG_DISABLE_KEVENT_FILTER (1UL << 0)
+#define LIBIPCON_FLG_USE_RCV_IF (1UL << 1)
+#define LIBIPCON_FLG_USE_SND_IF (1UL << 2)
+#define LIBIPCON_FLG_DEFAULT (LIBIPCON_FLG_USE_RCV_IF | LIBIPCON_FLG_USE_SND_IF)
 
 enum libipcon_kevent_type {
 	LIBIPCON_EVENT_PEER_ADD,
@@ -80,20 +77,18 @@ struct peer_group_info {
 	int auto_join;
 };
 
-
 struct async_cb_ctl {
-	void (*normal_msg_cb)(char *peer_name, void *buf,
-			uint32_t len, void *data);
-	void (*group_msg_cb)(char *peer_name, char *group_name,
-			void *buf, uint32_t len, void *data);
-	void  (*peer_add)(char *peer_name, void *data);
+	void (*normal_msg_cb)(char *peer_name, void *buf, uint32_t len,
+			      void *data);
+	void (*group_msg_cb)(char *peer_name, char *group_name, void *buf,
+			     uint32_t len, void *data);
+	void (*peer_add)(char *peer_name, void *data);
 	void (*peer_remove)(char *peer_name, void *data);
-	void  (*group_add)(char *peer_name, char *group_name, void *data);
+	void (*group_add)(char *peer_name, char *group_name, void *data);
 	void (*group_remove)(char *peer_name, char *group_name, void *data);
-	void (*auto_group_join)(char *peer_name,
-			char *group_name, void *data);
+	void (*auto_group_join)(char *peer_name, char *group_name, void *data);
 	void (*auto_group_leave)(char *peer_name, char *group_name, void *data);
-	void  (*rcv_msg_error)(int error, void *data);
+	void (*rcv_msg_error)(int error, void *data);
 	void *data;
 };
 
@@ -108,8 +103,8 @@ void ipcon_free_handler(IPCON_HANDLER handler);
 int is_peer_present(IPCON_HANDLER handler, char *name);
 int is_group_present(IPCON_HANDLER handler, char *peer_name, char *group_name);
 int ipcon_rcv(IPCON_HANDLER handler, struct ipcon_msg *im);
-int ipcon_send_unicast(IPCON_HANDLER handler, char *name,
-				void *buf, size_t size);
+int ipcon_send_unicast(IPCON_HANDLER handler, char *name, void *buf,
+		       size_t size);
 int ipcon_register_group(IPCON_HANDLER handler, char *name);
 int ipcon_unregister_group(IPCON_HANDLER handler, char *name);
 int ipcon_join_group(IPCON_HANDLER handler, char *srvname, char *grpname);
@@ -120,9 +115,9 @@ int ipcon_get_write_fd(IPCON_HANDLER handler);
 
 int ipcon_find_group(IPCON_HANDLER handler, char *name, uint32_t *groupid);
 int ipcon_send_multicast(IPCON_HANDLER handler, char *name, void *buf,
-			size_t size, int sync);
+			 size_t size, int sync);
 int ipcon_rcv_timeout(IPCON_HANDLER handler, struct ipcon_msg *im,
-		struct timeval *timeout);
+		      struct timeval *timeout);
 
 int ipcon_rcv_nonblock(IPCON_HANDLER handler, struct ipcon_msg *im);
 int ipcon_async_rcv(IPCON_HANDLER handler, struct async_rcv_ctl *arc);

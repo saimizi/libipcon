@@ -13,7 +13,6 @@
  * See the GNU Lesser General Public License for more details.
  */
 
-
 #ifndef __LIBIPCON_PRIV_H__
 #define __LIBIPCON_PRIV_H__
 

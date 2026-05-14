@@ -76,10 +76,10 @@ static void is_peer_present_with_rcv_if(void **state)
 	will_return(__wrap_nl_recvmsgs_default, 0); /* cb_valid */
 	will_return(__wrap_nl_recvmsgs_default, 1); /* cb_ack */
 	will_return(__wrap_nl_recvmsgs_default, NULL);
-	will_return(__wrap_nl_recvmsgs_default, 0);  /* success */
+	will_return(__wrap_nl_recvmsgs_default, 0); /* success */
 
-	IPCON_HANDLER handler = ipcon_create_handler(peer_name,
-						      LIBIPCON_FLG_DEFAULT);
+	IPCON_HANDLER handler =
+		ipcon_create_handler(peer_name, LIBIPCON_FLG_DEFAULT);
 	assert_non_null(handler);
 
 	/* is_peer_present: PEER_RESLOVE send_rcv - peer found */
@@ -134,8 +134,8 @@ static void is_peer_present_notfound(void **state)
 	will_return(__wrap_nl_recvmsgs_default, NULL);
 	will_return(__wrap_nl_recvmsgs_default, 0);
 
-	IPCON_HANDLER handler = ipcon_create_handler(peer_name,
-						      LIBIPCON_FLG_DEFAULT);
+	IPCON_HANDLER handler =
+		ipcon_create_handler(peer_name, LIBIPCON_FLG_DEFAULT);
 	assert_non_null(handler);
 
 	/* Simulate nl_send_auto failing (peer not found) */
