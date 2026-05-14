@@ -237,6 +237,11 @@ static void create_handler_default_flags(void **state)
 	will_return(__wrap_nl_recvmsgs_default, 1);
 	will_return(__wrap_nl_recvmsgs_default, NULL);
 	will_return(__wrap_nl_recvmsgs_default, 0);
+	/* Extra in case of additional recvmsgs calls */
+	will_return(__wrap_nl_recvmsgs_default, 0);
+	will_return(__wrap_nl_recvmsgs_default, 1);
+	will_return(__wrap_nl_recvmsgs_default, NULL);
+	will_return(__wrap_nl_recvmsgs_default, 0);
 
 	IPCON_HANDLER handler =
 		ipcon_create_handler(peer_name, LIBIPCON_FLG_DEFAULT);
