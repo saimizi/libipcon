@@ -107,6 +107,7 @@ static void selfname_with_name(void **state)
 	assert_string_equal(returned_name, "test_peer");
 
 	will_return(__wrap__test_free, false);
+	will_return(__wrap__test_free, false);
 	ipcon_free_handler(handler);
 }
 
@@ -296,6 +297,7 @@ static void create_handler_default_flags(void **state)
 	assert_true(iph->flags & IPH_FLG_SND_IF);
 
 	will_return(__wrap__test_free, false);
+	will_return(__wrap__test_free, false);
 	ipcon_free_handler(handler);
 }
 
@@ -366,6 +368,7 @@ static void create_handler_no_flags(void **state)
 	assert_int_equal(ipcon_get_read_fd(handler), -EPERM);
 	assert_int_equal(ipcon_get_write_fd(handler), -EPERM);
 
+	will_return(__wrap__test_free, false);
 	will_return(__wrap__test_free, false);
 	ipcon_free_handler(handler);
 }
