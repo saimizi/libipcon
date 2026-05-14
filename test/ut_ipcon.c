@@ -31,8 +31,9 @@
 
 /*
  * Helper: mock setup for a single-channel (flags=0) create_handler.
- * iph is real-allocated, strdup returns static buffer.
- * Provides extra nl_recvmsgs_default slots for auto-ack retries.
+ * Uses the same proven pattern as ut_ipcon_create_handler.c:
+ * iph is real-allocated, strdup returns a static buffer.
+ * free(check=true) for the static buffer, free(check=false) for iph.
  */
 static void expect_create_handler_named_single(char **strdup_out)
 {
@@ -53,36 +54,9 @@ static void expect_create_handler_named_single(char **strdup_out)
 	expect_value(__wrap_nl_connect, prot, NETLINK_IPCON);
 	will_return(__wrap_nl_connect, 0);
 
-	/* PEER_REG send_rcv (8 rounds for auto-ack safety) */
+	/* PEER_REG send_rcv */
 	will_return(__wrap_nl_send_auto, 0);
-	will_return(__wrap_nl_recvmsgs_default, 0);
-	will_return(__wrap_nl_recvmsgs_default, 1);
-	will_return(__wrap_nl_recvmsgs_default, NULL);
-	will_return(__wrap_nl_recvmsgs_default, 0);
-	will_return(__wrap_nl_recvmsgs_default, 0);
-	will_return(__wrap_nl_recvmsgs_default, 1);
-	will_return(__wrap_nl_recvmsgs_default, NULL);
-	will_return(__wrap_nl_recvmsgs_default, 0);
-	will_return(__wrap_nl_recvmsgs_default, 0);
-	will_return(__wrap_nl_recvmsgs_default, 1);
-	will_return(__wrap_nl_recvmsgs_default, NULL);
-	will_return(__wrap_nl_recvmsgs_default, 0);
-	will_return(__wrap_nl_recvmsgs_default, 0);
-	will_return(__wrap_nl_recvmsgs_default, 1);
-	will_return(__wrap_nl_recvmsgs_default, NULL);
-	will_return(__wrap_nl_recvmsgs_default, 0);
-	will_return(__wrap_nl_recvmsgs_default, 0);
-	will_return(__wrap_nl_recvmsgs_default, 1);
-	will_return(__wrap_nl_recvmsgs_default, NULL);
-	will_return(__wrap_nl_recvmsgs_default, 0);
-	will_return(__wrap_nl_recvmsgs_default, 0);
-	will_return(__wrap_nl_recvmsgs_default, 1);
-	will_return(__wrap_nl_recvmsgs_default, NULL);
-	will_return(__wrap_nl_recvmsgs_default, 0);
-	will_return(__wrap_nl_recvmsgs_default, 0);
-	will_return(__wrap_nl_recvmsgs_default, 1);
-	will_return(__wrap_nl_recvmsgs_default, NULL);
-	will_return(__wrap_nl_recvmsgs_default, 0);
+	/* nl_recvmsgs_default: skip valid, do ack, return 0 */
 	will_return(__wrap_nl_recvmsgs_default, 0);
 	will_return(__wrap_nl_recvmsgs_default, 1);
 	will_return(__wrap_nl_recvmsgs_default, NULL);
@@ -106,7 +80,10 @@ static void selfname_with_name(void **state)
 	assert_non_null(returned_name);
 	assert_string_equal(returned_name, "test_peer");
 
-	will_return(__wrap__test_free, false);
+	/* free(iph->name): check=true, verify static buffer */
+	will_return(__wrap__test_free, true);
+	will_return(__wrap__test_free, strdup_peer_name);
+	/* free(iph): check=false, call real free on heap alloc */
 	will_return(__wrap__test_free, false);
 	ipcon_free_handler(handler);
 }
@@ -165,8 +142,7 @@ static void get_write_fd_null_handler(void **state)
 }
 
 /*
- * Null/invalid handler tests
- * Only tests functions that properly NULL-check before dereference.
+ * Null/invalid handler tests (functions that properly NULL-check)
  */
 
 static void rcv_null_handler(void **state)
@@ -205,7 +181,6 @@ static void api_invalid_names(void **state)
 
 static void api_trivial_checks(void **state)
 {
-	/* Functions that check !im or size before handler deref */
 	assert_int_equal(ipcon_rcv((IPCON_HANDLER)0x1, NULL), -EINVAL);
 	assert_int_equal(ipcon_send_unicast((IPCON_HANDLER)0x1, "peer", NULL,
 					    0),
@@ -221,11 +196,16 @@ static void api_trivial_checks(void **state)
 
 static void create_handler_default_flags(void **state)
 {
+	/*
+	 * LIBIPCON_FLG_DEFAULT = RCV_IF | SND_IF = 3 channels
+	 * Uses exact same pattern as the single-channel case
+	 * but with 3 channel inits + 1 PEER_REG.
+	 */
+
 	const char *peer_name = "default_test";
 	static char sn1[32];
 	strcpy(sn1, peer_name);
 
-	/* Real alloc for iph */
 	will_return(__wrap__test_malloc, false);
 	will_return(__wrap__test_malloc, true);
 
@@ -251,36 +231,8 @@ static void create_handler_default_flags(void **state)
 	expect_value(__wrap_nl_connect, prot, NETLINK_IPCON);
 	will_return(__wrap_nl_connect, 0);
 
-	/* PEER_REG send_rcv (8 rounds for auto-ack safety) */
+	/* PEER_REG */
 	will_return(__wrap_nl_send_auto, 0);
-	will_return(__wrap_nl_recvmsgs_default, 0);
-	will_return(__wrap_nl_recvmsgs_default, 1);
-	will_return(__wrap_nl_recvmsgs_default, NULL);
-	will_return(__wrap_nl_recvmsgs_default, 0);
-	will_return(__wrap_nl_recvmsgs_default, 0);
-	will_return(__wrap_nl_recvmsgs_default, 1);
-	will_return(__wrap_nl_recvmsgs_default, NULL);
-	will_return(__wrap_nl_recvmsgs_default, 0);
-	will_return(__wrap_nl_recvmsgs_default, 0);
-	will_return(__wrap_nl_recvmsgs_default, 1);
-	will_return(__wrap_nl_recvmsgs_default, NULL);
-	will_return(__wrap_nl_recvmsgs_default, 0);
-	will_return(__wrap_nl_recvmsgs_default, 0);
-	will_return(__wrap_nl_recvmsgs_default, 1);
-	will_return(__wrap_nl_recvmsgs_default, NULL);
-	will_return(__wrap_nl_recvmsgs_default, 0);
-	will_return(__wrap_nl_recvmsgs_default, 0);
-	will_return(__wrap_nl_recvmsgs_default, 1);
-	will_return(__wrap_nl_recvmsgs_default, NULL);
-	will_return(__wrap_nl_recvmsgs_default, 0);
-	will_return(__wrap_nl_recvmsgs_default, 0);
-	will_return(__wrap_nl_recvmsgs_default, 1);
-	will_return(__wrap_nl_recvmsgs_default, NULL);
-	will_return(__wrap_nl_recvmsgs_default, 0);
-	will_return(__wrap_nl_recvmsgs_default, 0);
-	will_return(__wrap_nl_recvmsgs_default, 1);
-	will_return(__wrap_nl_recvmsgs_default, NULL);
-	will_return(__wrap_nl_recvmsgs_default, 0);
 	will_return(__wrap_nl_recvmsgs_default, 0);
 	will_return(__wrap_nl_recvmsgs_default, 1);
 	will_return(__wrap_nl_recvmsgs_default, NULL);
@@ -296,7 +248,8 @@ static void create_handler_default_flags(void **state)
 	assert_true(iph->flags & IPH_FLG_RCV_IF);
 	assert_true(iph->flags & IPH_FLG_SND_IF);
 
-	will_return(__wrap__test_free, false);
+	will_return(__wrap__test_free, true);
+	will_return(__wrap__test_free, sn1);
 	will_return(__wrap__test_free, false);
 	ipcon_free_handler(handler);
 }
@@ -307,7 +260,6 @@ static void create_handler_no_flags(void **state)
 	static char sn2[32];
 	strcpy(sn2, peer_name);
 
-	/* Real alloc for iph */
 	will_return(__wrap__test_malloc, false);
 	will_return(__wrap__test_malloc, true);
 
@@ -321,36 +273,8 @@ static void create_handler_no_flags(void **state)
 	expect_value(__wrap_nl_connect, prot, NETLINK_IPCON);
 	will_return(__wrap_nl_connect, 0);
 
-	/* PEER_REG send_rcv (8 rounds for auto-ack safety) */
+	/* PEER_REG */
 	will_return(__wrap_nl_send_auto, 0);
-	will_return(__wrap_nl_recvmsgs_default, 0);
-	will_return(__wrap_nl_recvmsgs_default, 1);
-	will_return(__wrap_nl_recvmsgs_default, NULL);
-	will_return(__wrap_nl_recvmsgs_default, 0);
-	will_return(__wrap_nl_recvmsgs_default, 0);
-	will_return(__wrap_nl_recvmsgs_default, 1);
-	will_return(__wrap_nl_recvmsgs_default, NULL);
-	will_return(__wrap_nl_recvmsgs_default, 0);
-	will_return(__wrap_nl_recvmsgs_default, 0);
-	will_return(__wrap_nl_recvmsgs_default, 1);
-	will_return(__wrap_nl_recvmsgs_default, NULL);
-	will_return(__wrap_nl_recvmsgs_default, 0);
-	will_return(__wrap_nl_recvmsgs_default, 0);
-	will_return(__wrap_nl_recvmsgs_default, 1);
-	will_return(__wrap_nl_recvmsgs_default, NULL);
-	will_return(__wrap_nl_recvmsgs_default, 0);
-	will_return(__wrap_nl_recvmsgs_default, 0);
-	will_return(__wrap_nl_recvmsgs_default, 1);
-	will_return(__wrap_nl_recvmsgs_default, NULL);
-	will_return(__wrap_nl_recvmsgs_default, 0);
-	will_return(__wrap_nl_recvmsgs_default, 0);
-	will_return(__wrap_nl_recvmsgs_default, 1);
-	will_return(__wrap_nl_recvmsgs_default, NULL);
-	will_return(__wrap_nl_recvmsgs_default, 0);
-	will_return(__wrap_nl_recvmsgs_default, 0);
-	will_return(__wrap_nl_recvmsgs_default, 1);
-	will_return(__wrap_nl_recvmsgs_default, NULL);
-	will_return(__wrap_nl_recvmsgs_default, 0);
 	will_return(__wrap_nl_recvmsgs_default, 0);
 	will_return(__wrap_nl_recvmsgs_default, 1);
 	will_return(__wrap_nl_recvmsgs_default, NULL);
@@ -368,7 +292,8 @@ static void create_handler_no_flags(void **state)
 	assert_int_equal(ipcon_get_read_fd(handler), -EPERM);
 	assert_int_equal(ipcon_get_write_fd(handler), -EPERM);
 
-	will_return(__wrap__test_free, false);
+	will_return(__wrap__test_free, true);
+	will_return(__wrap__test_free, sn2);
 	will_return(__wrap__test_free, false);
 	ipcon_free_handler(handler);
 }
