@@ -53,8 +53,32 @@ static void expect_create_handler_named_single(char **strdup_out)
 	expect_value(__wrap_nl_connect, prot, NETLINK_IPCON);
 	will_return(__wrap_nl_connect, 0);
 
-	/* PEER_REG send_rcv (2 rounds for auto-ack safety) */
+	/* PEER_REG send_rcv (8 rounds for auto-ack safety) */
 	will_return(__wrap_nl_send_auto, 0);
+	will_return(__wrap_nl_recvmsgs_default, 0);
+	will_return(__wrap_nl_recvmsgs_default, 1);
+	will_return(__wrap_nl_recvmsgs_default, NULL);
+	will_return(__wrap_nl_recvmsgs_default, 0);
+	will_return(__wrap_nl_recvmsgs_default, 0);
+	will_return(__wrap_nl_recvmsgs_default, 1);
+	will_return(__wrap_nl_recvmsgs_default, NULL);
+	will_return(__wrap_nl_recvmsgs_default, 0);
+	will_return(__wrap_nl_recvmsgs_default, 0);
+	will_return(__wrap_nl_recvmsgs_default, 1);
+	will_return(__wrap_nl_recvmsgs_default, NULL);
+	will_return(__wrap_nl_recvmsgs_default, 0);
+	will_return(__wrap_nl_recvmsgs_default, 0);
+	will_return(__wrap_nl_recvmsgs_default, 1);
+	will_return(__wrap_nl_recvmsgs_default, NULL);
+	will_return(__wrap_nl_recvmsgs_default, 0);
+	will_return(__wrap_nl_recvmsgs_default, 0);
+	will_return(__wrap_nl_recvmsgs_default, 1);
+	will_return(__wrap_nl_recvmsgs_default, NULL);
+	will_return(__wrap_nl_recvmsgs_default, 0);
+	will_return(__wrap_nl_recvmsgs_default, 0);
+	will_return(__wrap_nl_recvmsgs_default, 1);
+	will_return(__wrap_nl_recvmsgs_default, NULL);
+	will_return(__wrap_nl_recvmsgs_default, 0);
 	will_return(__wrap_nl_recvmsgs_default, 0);
 	will_return(__wrap_nl_recvmsgs_default, 1);
 	will_return(__wrap_nl_recvmsgs_default, NULL);
@@ -226,8 +250,32 @@ static void create_handler_default_flags(void **state)
 	expect_value(__wrap_nl_connect, prot, NETLINK_IPCON);
 	will_return(__wrap_nl_connect, 0);
 
-	/* PEER_REG send_rcv (2 rounds for auto-ack safety) */
+	/* PEER_REG send_rcv (8 rounds for auto-ack safety) */
 	will_return(__wrap_nl_send_auto, 0);
+	will_return(__wrap_nl_recvmsgs_default, 0);
+	will_return(__wrap_nl_recvmsgs_default, 1);
+	will_return(__wrap_nl_recvmsgs_default, NULL);
+	will_return(__wrap_nl_recvmsgs_default, 0);
+	will_return(__wrap_nl_recvmsgs_default, 0);
+	will_return(__wrap_nl_recvmsgs_default, 1);
+	will_return(__wrap_nl_recvmsgs_default, NULL);
+	will_return(__wrap_nl_recvmsgs_default, 0);
+	will_return(__wrap_nl_recvmsgs_default, 0);
+	will_return(__wrap_nl_recvmsgs_default, 1);
+	will_return(__wrap_nl_recvmsgs_default, NULL);
+	will_return(__wrap_nl_recvmsgs_default, 0);
+	will_return(__wrap_nl_recvmsgs_default, 0);
+	will_return(__wrap_nl_recvmsgs_default, 1);
+	will_return(__wrap_nl_recvmsgs_default, NULL);
+	will_return(__wrap_nl_recvmsgs_default, 0);
+	will_return(__wrap_nl_recvmsgs_default, 0);
+	will_return(__wrap_nl_recvmsgs_default, 1);
+	will_return(__wrap_nl_recvmsgs_default, NULL);
+	will_return(__wrap_nl_recvmsgs_default, 0);
+	will_return(__wrap_nl_recvmsgs_default, 0);
+	will_return(__wrap_nl_recvmsgs_default, 1);
+	will_return(__wrap_nl_recvmsgs_default, NULL);
+	will_return(__wrap_nl_recvmsgs_default, 0);
 	will_return(__wrap_nl_recvmsgs_default, 0);
 	will_return(__wrap_nl_recvmsgs_default, 1);
 	will_return(__wrap_nl_recvmsgs_default, NULL);
@@ -271,8 +319,32 @@ static void create_handler_no_flags(void **state)
 	expect_value(__wrap_nl_connect, prot, NETLINK_IPCON);
 	will_return(__wrap_nl_connect, 0);
 
-	/* PEER_REG send_rcv (2 rounds for auto-ack safety) */
+	/* PEER_REG send_rcv (8 rounds for auto-ack safety) */
 	will_return(__wrap_nl_send_auto, 0);
+	will_return(__wrap_nl_recvmsgs_default, 0);
+	will_return(__wrap_nl_recvmsgs_default, 1);
+	will_return(__wrap_nl_recvmsgs_default, NULL);
+	will_return(__wrap_nl_recvmsgs_default, 0);
+	will_return(__wrap_nl_recvmsgs_default, 0);
+	will_return(__wrap_nl_recvmsgs_default, 1);
+	will_return(__wrap_nl_recvmsgs_default, NULL);
+	will_return(__wrap_nl_recvmsgs_default, 0);
+	will_return(__wrap_nl_recvmsgs_default, 0);
+	will_return(__wrap_nl_recvmsgs_default, 1);
+	will_return(__wrap_nl_recvmsgs_default, NULL);
+	will_return(__wrap_nl_recvmsgs_default, 0);
+	will_return(__wrap_nl_recvmsgs_default, 0);
+	will_return(__wrap_nl_recvmsgs_default, 1);
+	will_return(__wrap_nl_recvmsgs_default, NULL);
+	will_return(__wrap_nl_recvmsgs_default, 0);
+	will_return(__wrap_nl_recvmsgs_default, 0);
+	will_return(__wrap_nl_recvmsgs_default, 1);
+	will_return(__wrap_nl_recvmsgs_default, NULL);
+	will_return(__wrap_nl_recvmsgs_default, 0);
+	will_return(__wrap_nl_recvmsgs_default, 0);
+	will_return(__wrap_nl_recvmsgs_default, 1);
+	will_return(__wrap_nl_recvmsgs_default, NULL);
+	will_return(__wrap_nl_recvmsgs_default, 0);
 	will_return(__wrap_nl_recvmsgs_default, 0);
 	will_return(__wrap_nl_recvmsgs_default, 1);
 	will_return(__wrap_nl_recvmsgs_default, NULL);
