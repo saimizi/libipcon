@@ -36,31 +36,30 @@
  */
 static void expect_create_handler_named_single(char **strdup_out)
 {
-	char *name = "test_peer";
-	*strdup_out = strdup(name); /* Will be freed by handler */
-	assert_non_null(*strdup_out);
+	/* Use static buf to avoid calling strdup() which goes through mock */
+	static char buf[32];
+	strcpy(buf, "test_peer");
+	*strdup_out = buf;
 
-	/* Real alloc for iph */
 	will_return(__wrap__test_malloc, false);
 	will_return(__wrap__test_malloc, true);
 
-	/* strdup */
 	will_return(__wrap_strdup, 1);
-	expect_string(__wrap_strdup, s, name);
+	expect_string(__wrap_strdup, s, "test_peer");
 	will_return(__wrap_strdup, *strdup_out);
 
-	/* c_chan init: cb_alloc, socket_alloc_cb, nl_connect */
+	/* c_chan init */
 	will_return(__wrap_nl_cb_alloc, 0);
 	will_return(__wrap_nl_socket_alloc_cb, 0);
 	expect_value(__wrap_nl_connect, prot, NETLINK_IPCON);
 	will_return(__wrap_nl_connect, 0);
 
-	/* PEER_REG: nl_send_auto + nl_recvmsgs_default x4 */
+	/* PEER_REG */
 	will_return(__wrap_nl_send_auto, 0);
-	will_return(__wrap_nl_recvmsgs_default, 0); /* do_valid */
-	will_return(__wrap_nl_recvmsgs_default, 1); /* do_ack */
-	will_return(__wrap_nl_recvmsgs_default, NULL); /* ack msg */
-	will_return(__wrap_nl_recvmsgs_default, 0); /* ret */
+	will_return(__wrap_nl_recvmsgs_default, 0);
+	will_return(__wrap_nl_recvmsgs_default, 1);
+	will_return(__wrap_nl_recvmsgs_default, NULL);
+	will_return(__wrap_nl_recvmsgs_default, 0);
 }
 
 /*
@@ -193,10 +192,12 @@ static void api_null_msg(void **state)
 static void api_send_trivial_error(void **state)
 {
 	/* size <= 0 triggers early return before dereferencing handler */
-	assert_int_equal(ipcon_send_unicast((IPCON_HANDLER)0x1,
-					    "peer", NULL, 0), -EINVAL);
-	assert_int_equal(ipcon_send_multicast((IPCON_HANDLER)0x1,
-					      "grp", NULL, 0, 0), -EINVAL);
+	assert_int_equal(ipcon_send_unicast((IPCON_HANDLER)0x1, "peer", NULL,
+					    0),
+			 -EINVAL);
+	assert_int_equal(ipcon_send_multicast((IPCON_HANDLER)0x1, "grp", NULL,
+					      0, 0),
+			 -EINVAL);
 }
 
 /*
@@ -212,15 +213,14 @@ static void create_handler_default_flags(void **state)
 	 * Then PEER_REG: nl_send_auto + nl_recvmsgs_default x4
 	 */
 
-	char *peer_name = "default_test";
-	char *strdup_peer_name = strdup(peer_name);
-	assert_non_null(strdup_peer_name);
+	const char *peer_name = "default_test";
+	static char sn1[32];
+	strcpy(sn1, peer_name);
+	char *strdup_peer_name = sn1;
 
-	/* Real alloc for iph */
 	will_return(__wrap__test_malloc, false);
 	will_return(__wrap__test_malloc, true);
 
-	/* strdup */
 	will_return(__wrap_strdup, 1);
 	expect_string(__wrap_strdup, s, peer_name);
 	will_return(__wrap_strdup, strdup_peer_name);
@@ -270,15 +270,14 @@ static void create_handler_no_flags(void **state)
 	 * With flags=0, only c_chan is initialized (no s_chan, no r_chan)
 	 */
 
-	char *peer_name = "noflag_test";
-	char *strdup_peer_name = strdup(peer_name);
-	assert_non_null(strdup_peer_name);
+	const char *peer_name = "noflag_test";
+	static char sn2[32];
+	strcpy(sn2, peer_name);
+	char *strdup_peer_name = sn2;
 
-	/* Real alloc for iph */
 	will_return(__wrap__test_malloc, false);
 	will_return(__wrap__test_malloc, true);
 
-	/* strdup */
 	will_return(__wrap_strdup, 1);
 	expect_string(__wrap_strdup, s, peer_name);
 	will_return(__wrap_strdup, strdup_peer_name);
