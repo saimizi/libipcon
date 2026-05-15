@@ -636,6 +636,90 @@ static void is_group_present_null_args(void **state)
 }
 
 /*
+ * is_group_present: peer/group not found — nl_send_auto fails.
+ */
+
+static void is_group_present_not_found(void **state)
+{
+	char *strdup_peer_name = NULL;
+
+	expect_handler_named_single("gpr_test", &strdup_peer_name);
+
+	IPCON_HANDLER handler = ipcon_create_handler("gpr_test", 0);
+	assert_non_null(handler);
+
+	{
+		struct ipcon_peer_handler *iph = handler_to_iph(handler);
+		iph->flags |= IPH_FLG_SND_IF;
+	}
+
+	/* Simulate nl_send_auto failing (group not resolved) */
+	will_return(__wrap_nl_send_auto, -ENOENT);
+
+	int ret = is_group_present(handler, "some_peer", "some_group");
+	assert_int_equal(ret, 0);
+
+	expect_free_handler(strdup_peer_name);
+	ipcon_free_handler(handler);
+}
+
+/*
+ * is_group_present: group found — ipcon_get_group resolves successfully.
+ *
+ * We pre-set c_chan.ir.msg to a crafted response containing
+ * IPCON_ATTR_GROUP, then mock nl_recvmsgs_default to skip the VALID
+ * callback (so ir.msg is not overwritten) and fire the ACK callback.
+ */
+
+static void is_group_present_found(void **state)
+{
+	char *strdup_peer_name = NULL;
+	uint32_t expected_groupid = 7;
+
+	expect_handler_named_single("gpf_test", &strdup_peer_name);
+
+	IPCON_HANDLER handler = ipcon_create_handler("gpf_test", 0);
+	assert_non_null(handler);
+
+	struct ipcon_peer_handler *iph = handler_to_iph(handler);
+	iph->flags |= IPH_FLG_SND_IF;
+
+	/* Build a response message with IPCON_ATTR_GROUP */
+	struct nl_msg *resp = nlmsg_alloc();
+	assert_non_null(resp);
+
+	/*
+	 * Construct a reply like the kernel would send:
+	 *   nlmsg_type = some response type
+	 *   payload after IPCONMSG_HDRLEN has NLA attributes
+	 *   IPCON_ATTR_GROUP = u32
+	 *
+	 * Use NL_AUTO_PORT/SEQ and a dummy nlmsg_type that is not
+	 * an IPCON command (the caller doesn't check the response type).
+	 */
+	nlmsg_put(resp, NL_AUTO_PORT, NL_AUTO_SEQ, 0, IPCONMSG_HDRLEN,
+		  NLM_F_REQUEST);
+	nla_put_u32(resp, IPCON_ATTR_GROUP, expected_groupid);
+
+	/* Pre-set the response so ipcon_send_rcv picks it up */
+	iph->c_chan.ir.msg = resp;
+
+	/* Mock nl_recvmsgs_default: skip VALID, fire ACK, return 0 */
+	will_return(__wrap_nl_send_auto, 0);
+	will_return(__wrap_nl_recvmsgs_default, 0); /* do_valid */
+	will_return(__wrap_nl_recvmsgs_default, 1); /* do_ack */
+	will_return(__wrap_nl_recvmsgs_default, NULL);
+	will_return(__wrap_nl_recvmsgs_default, 0); /* ret */
+
+	int ret = is_group_present(handler, "peer_y", "group_x");
+	assert_int_not_equal(ret, 0);
+
+	/* resp is freed internally by ipcon_get_group via nlmsg_free(rmsg) */
+	expect_free_handler(strdup_peer_name);
+	ipcon_free_handler(handler);
+}
+
+/*
  * ipcon_join/leave_group null/error tests
  */
 
@@ -1012,6 +1096,8 @@ int ipcon_api_tests_run(void *state)
 
 		/* Group operations */
 		cmocka_unit_test(is_group_present_null_args),
+		cmocka_unit_test(is_group_present_not_found),
+		cmocka_unit_test(is_group_present_found),
 		cmocka_unit_test(join_leave_no_rcv_if),
 
 		/* rcv */
