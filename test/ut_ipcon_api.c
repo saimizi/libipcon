@@ -34,7 +34,8 @@
  * strdup returns a static buffer.  free(check=true) for the static
  * buffer, free(check=false) for iph.
  */
-static void expect_handler_named_single(const char *peer_name, char **strdup_out)
+static void expect_handler_named_single(const char *peer_name,
+					char **strdup_out)
 {
 	static char namebuf[32];
 	strncpy(namebuf, peer_name, sizeof(namebuf) - 1);
