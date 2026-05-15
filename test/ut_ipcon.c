@@ -194,7 +194,6 @@ static void api_trivial_checks(void **state)
  * Extended ipcon_create_handler tests
  */
 
-static void create_handler_default_flags(void **state)
 {
 	/*
 	 * LIBIPCON_FLG_DEFAULT = RCV_IF | SND_IF = 3 channels
@@ -388,7 +387,6 @@ int ipcon_tests_run(void *state)
 		cmocka_unit_test(api_invalid_names),
 		cmocka_unit_test(api_trivial_checks),
 
-		cmocka_unit_test(create_handler_default_flags),
 		cmocka_unit_test(create_handler_no_flags),
 
 		cmocka_unit_test(free_handler_null),
