@@ -34,7 +34,8 @@
  * The mock for nl_send_auto controls the send result, and the mock for
  * nl_recvmsgs_default controls the receive/ack result.
  *
- * 0 return = peer found, non-zero = peer not found or error
+ * is_peer_present returns ret == 0 on success, i.e. 1 (truthy) =
+ * peer found, 0 (falsy) = not present or error.
  */
 
 static void is_peer_present_with_rcv_if(void **state)
@@ -86,7 +87,7 @@ static void is_peer_present_with_rcv_if(void **state)
 	will_return(__wrap_nl_recvmsgs_default, 0);
 
 	int ret = is_peer_present(handler, server_name);
-	assert_int_equal(ret, 0);
+	assert_int_not_equal(ret, 0);
 
 	will_return(__wrap__test_free, true);
 	will_return(__wrap__test_free, strdup_peer_name);
@@ -101,7 +102,6 @@ static void is_peer_present_notfound(void **state)
 	char *server_name = "nonexistent_server";
 	char iph_mem[1024];
 
-	will_return(__wrap__test_malloc, false);
 	will_return(__wrap__test_malloc, false);
 	will_return(__wrap__test_malloc, false);
 	will_return(__wrap__test_malloc, iph_mem);
@@ -139,7 +139,7 @@ static void is_peer_present_notfound(void **state)
 	will_return(__wrap_nl_recvmsgs_default, 0);
 
 	int ret = is_peer_present(handler, server_name);
-	assert_int_not_equal(ret, 0);
+	assert_int_equal(ret, 0);
 
 	will_return(__wrap__test_free, true);
 	will_return(__wrap__test_free, strdup_peer_name);
