@@ -1218,6 +1218,121 @@ static void unregister_group_no_snd_if(void **state)
 	ipcon_free_handler(handler);
 }
 
+/*
+ * ipcon_get_read_fd tests
+ */
+
+static void get_read_fd_no_rcv_if(void **state)
+{
+	char *strdup_peer_name = NULL;
+
+	expect_handler_named_single("rfd_no", &strdup_peer_name);
+
+	IPCON_HANDLER handler = ipcon_create_handler("rfd_no", 0);
+	assert_non_null(handler);
+
+	int fd = ipcon_get_read_fd(handler);
+	assert_int_equal(fd, -EPERM);
+
+	expect_free_handler(strdup_peer_name);
+	ipcon_free_handler(handler);
+}
+
+static void get_read_fd_success(void **state)
+{
+	char *strdup_peer_name = NULL;
+
+	expect_handler_named_single_with_rcvif("rfd_ok", &strdup_peer_name);
+
+	IPCON_HANDLER handler =
+		ipcon_create_handler("rfd_ok", LIBIPCON_FLG_USE_RCV_IF);
+	assert_non_null(handler);
+
+	/* r_chan.sk was allocated during create_handler but never
+	 * nl_connect()ed, so nl_socket_get_fd returns -1.
+	 * The key check: function returns a value (not -EPERM via
+	 * an early exit), confirming the RCV_IF path is taken.
+	 * The actual fd value is -1 because the socket is unconnected. */
+	{
+		int fd = ipcon_get_read_fd(handler);
+		/* Must not return -EPERM; -1 means unconnected socket */
+		assert_int_equal(fd, -1);
+	}
+
+	expect_free_handler(strdup_peer_name);
+	ipcon_free_handler(handler);
+}
+
+/*
+ * ipcon_get_write_fd tests
+ */
+
+static void get_write_fd_no_snd_if(void **state)
+{
+	char *strdup_peer_name = NULL;
+
+	expect_handler_named_single("wfd_no", &strdup_peer_name);
+
+	IPCON_HANDLER handler = ipcon_create_handler("wfd_no", 0);
+	assert_non_null(handler);
+
+	int fd = ipcon_get_write_fd(handler);
+	assert_int_equal(fd, -EPERM);
+
+	expect_free_handler(strdup_peer_name);
+	ipcon_free_handler(handler);
+}
+
+static void get_write_fd_success(void **state)
+{
+	char *strdup_peer_name = NULL;
+
+	expect_handler_named_single("wfd_ok", &strdup_peer_name);
+
+	IPCON_HANDLER handler = ipcon_create_handler("wfd_ok", 0);
+	assert_non_null(handler);
+
+	struct ipcon_peer_handler *iph = handler_to_iph(handler);
+	init_s_chan_sk(iph);
+
+	/* s_chan was allocated by init_s_chan_sk but never
+	 * nl_connect()ed, so nl_socket_get_fd returns -1.
+	 * The key check: function returns a value (not -EPERM),
+	 * confirming the SND_IF path is taken. */
+	{
+		int fd = ipcon_get_write_fd(handler);
+		assert_int_equal(fd, -1);
+	}
+
+	expect_free_handler(strdup_peer_name);
+	ipcon_free_handler(handler);
+}
+
+/*
+ * ipcon_free_handler: full cleanup with all three channels initialized.
+ */
+static void free_handler_full(void **state)
+{
+	char *strdup_peer_name = NULL;
+
+	expect_handler_named_single_with_rcvif("free_full", &strdup_peer_name);
+
+	IPCON_HANDLER handler =
+		ipcon_create_handler("free_full", LIBIPCON_FLG_USE_RCV_IF);
+	assert_non_null(handler);
+
+	/* Set SND_IF so s_chan is cleaned up too (it was not initialized
+	 * during creation, but free_handler calls chan_destory which is
+	 * NULL-safe). */
+	{
+		struct ipcon_peer_handler *iph = handler_to_iph(handler);
+		iph->flags |= IPH_FLG_SND_IF;
+	}
+
+	expect_free_handler(strdup_peer_name);
+	ipcon_free_handler(handler);
+}
+
 int ipcon_api_tests_run(void *state)
 {
 	static struct CMUnitTest tests[] = {
@@ -1266,6 +1381,14 @@ int ipcon_api_tests_run(void *state)
 		cmocka_unit_test(rcv_missing_data),
 		cmocka_unit_test(rcv_multicast_msg),
 		cmocka_unit_test(rcv_kevent_msg),
+
+		/* get_read_fd / get_write_fd */
+		cmocka_unit_test(get_read_fd_no_rcv_if),
+		cmocka_unit_test(get_read_fd_success),
+		cmocka_unit_test(get_write_fd_no_snd_if),
+		cmocka_unit_test(get_write_fd_success),
+		/* free_handler */
+		cmocka_unit_test(free_handler_full),
 	};
 
 	return cmocka_run_group_tests(tests, NULL, NULL);
