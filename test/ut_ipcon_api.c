@@ -338,8 +338,8 @@ static void register_group_success(void **state)
 	will_return(__wrap_nl_recvmsgs_default, NULL);
 	will_return(__wrap_nl_recvmsgs_default, 0);
 
-	IPCON_HANDLER handler = ipcon_create_handler(peer_name,
-		LIBIPCON_FLG_USE_SND_IF);
+	IPCON_HANDLER handler =
+		ipcon_create_handler(peer_name, LIBIPCON_FLG_USE_SND_IF);
 	assert_non_null(handler);
 
 	/* register_group: IPCON_GRP_REG send_rcv */
@@ -431,8 +431,8 @@ static void unregister_group_success(void **state)
 	will_return(__wrap_nl_recvmsgs_default, NULL);
 	will_return(__wrap_nl_recvmsgs_default, 0);
 
-	IPCON_HANDLER handler = ipcon_create_handler(peer_name,
-		LIBIPCON_FLG_USE_SND_IF);
+	IPCON_HANDLER handler =
+		ipcon_create_handler(peer_name, LIBIPCON_FLG_USE_SND_IF);
 	assert_non_null(handler);
 
 	/* unregister_group: IPCON_GRP_UNREG send_rcv */
