@@ -249,6 +249,58 @@ static void async_rcv_null_args(void **state)
 	ipcon_async_rcv_stop(NULL);
 }
 
+/*
+ * async_rcv: start without RCV_IF → -EPERM (non-blocking).
+ */
+
+static void async_rcv_no_rcv_if(void **state)
+{
+	char *strdup_peer_name = NULL;
+
+	expect_create_handler_named_single(&strdup_peer_name);
+	IPCON_HANDLER handler = ipcon_create_handler("test_peer", 0);
+	assert_non_null(handler);
+
+	struct async_rcv_ctl arc;
+	memset(&arc, 0, sizeof(arc));
+
+	assert_int_equal(ipcon_async_rcv(handler, &arc), -EPERM);
+
+	will_return(__wrap__test_free, true);
+	will_return(__wrap__test_free, strdup_peer_name);
+	will_return(__wrap__test_free, false);
+	ipcon_free_handler(handler);
+}
+
+/*
+ * async_rcv_stop: stop without starting → safe no-op.
+ * Also tests stop without RCV_IF (should be a no-op).
+ */
+
+static void async_rcv_stop_noop(void **state)
+{
+	char *strdup_peer_name = NULL;
+
+	expect_create_handler_named_single(&strdup_peer_name);
+	IPCON_HANDLER handler = ipcon_create_handler("test_peer", 0);
+	assert_non_null(handler);
+
+	/* Stop without ever starting — should be safe */
+	ipcon_async_rcv_stop(handler);
+
+	/* Also test stop on handler without RCV_IF */
+	{
+		struct ipcon_peer_handler *iph = handler_to_iph(handler);
+		iph->flags |= IPH_FLG_RCV_IF;
+	}
+	ipcon_async_rcv_stop(handler);
+
+	will_return(__wrap__test_free, true);
+	will_return(__wrap__test_free, strdup_peer_name);
+	will_return(__wrap__test_free, false);
+	ipcon_free_handler(handler);
+}
+
 int ipcon_tests_run(void *state)
 {
 	static struct CMUnitTest tests[] = {
@@ -270,6 +322,8 @@ int ipcon_tests_run(void *state)
 		cmocka_unit_test(free_handler_null),
 
 		cmocka_unit_test(async_rcv_null_args),
+		cmocka_unit_test(async_rcv_no_rcv_if),
+		cmocka_unit_test(async_rcv_stop_noop),
 	};
 
 	return cmocka_run_group_tests(tests, NULL, NULL);
