@@ -130,7 +130,7 @@ static void is_peer_present_notfound(void **state)
 	will_return(__wrap_nl_send_auto, -ENOENT);
 
 	int ret = is_peer_present(handler, server_name);
-	assert_int_not_equal(ret, 0);
+	assert_int_equal(ret, 0);
 
 	expect_free_handler(strdup_peer_name);
 	ipcon_free_handler(handler);
