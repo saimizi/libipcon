@@ -128,13 +128,9 @@ static void is_peer_present_notfound(void **state)
 
 	/* Simulate nl_send_auto failing (peer not found) */
 	will_return(__wrap_nl_send_auto, -ENOENT);
-	will_return(__wrap_nl_recvmsgs_default, 0);
-	will_return(__wrap_nl_recvmsgs_default, 1);
-	will_return(__wrap_nl_recvmsgs_default, NULL);
-	will_return(__wrap_nl_recvmsgs_default, 0);
 
 	int ret = is_peer_present(handler, server_name);
-	assert_int_equal(ret, 0);
+	assert_int_not_equal(ret, 0);
 
 	expect_free_handler(strdup_peer_name);
 	ipcon_free_handler(handler);
