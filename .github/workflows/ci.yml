@@ -97,8 +97,8 @@ jobs:
 
           echo "## Coverage Summary" > ${{ github.workspace }}/coverage.md
           echo '```' >> ${{ github.workspace }}/coverage.md
-          lcov -l coverage.info --rc lcov_branch_coverage=1 \
-            | tail -n +2 >> ${{ github.workspace }}/coverage.md
+          lcov --summary coverage.info --rc lcov_branch_coverage=1 \
+            2>&1 | grep -v "^\(Reading\|$\)" >> ${{ github.workspace }}/coverage.md
           echo '```' >> ${{ github.workspace }}/coverage.md
 
           genhtml coverage.info \
