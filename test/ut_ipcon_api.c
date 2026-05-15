@@ -23,10 +23,15 @@
 #include <sys/stat.h>
 #include <sys/fcntl.h>
 #include <unistd.h>
+#include <sys/time.h>
+
+#include <netlink/netlink.h>
+#include <netlink/msg.h>
 
 #include "ut.h"
 #include "libipcon.h"
 #include "libipcon_priv.h"
+#include "ipcon.h"
 
 /*
  * Helper: mock setup for a single-channel (flags=0) create_handler.
@@ -215,6 +220,407 @@ static void rcv_no_rcv_if(void **state)
 		assert_int_equal(ipcon_rcv_nonblock(handler, &im), -EPERM);
 		assert_int_equal(ipcon_rcv_timeout(handler, &im, NULL), -EPERM);
 	}
+
+	expect_free_handler(strdup_peer_name);
+	ipcon_free_handler(handler);
+}
+
+/*
+ * Helper: mock setup for create_handler with LIBIPCON_FLG_USE_RCV_IF.
+ * Same pattern as expect_handler_named_single, but also expects the
+ * r_chan init sequence before the PEER_REG send_rcv.
+ */
+static void expect_handler_named_single_with_rcvif(const char *peer_name,
+						    char **strdup_out)
+{
+	static char namebuf[32];
+	strncpy(namebuf, peer_name, sizeof(namebuf) - 1);
+	namebuf[sizeof(namebuf) - 1] = '\0';
+	*strdup_out = namebuf;
+
+	will_return(__wrap__test_malloc, false);
+	will_return(__wrap__test_malloc, true);
+
+	will_return(__wrap_strdup, 1);
+	expect_string(__wrap_strdup, s, peer_name);
+	will_return(__wrap_strdup, *strdup_out);
+
+	/* c_chan init */
+	will_return(__wrap_nl_cb_alloc, 0);
+	will_return(__wrap_nl_socket_alloc_cb, 0);
+	expect_value(__wrap_nl_connect, prot, NETLINK_IPCON);
+	will_return(__wrap_nl_connect, 0);
+
+	/* r_chan init (LIBIPCON_FLG_USE_RCV_IF) */
+	will_return(__wrap_nl_cb_alloc, 0);
+	will_return(__wrap_nl_socket_alloc_cb, 0);
+	expect_value(__wrap_nl_connect, prot, NETLINK_IPCON);
+	will_return(__wrap_nl_connect, 0);
+
+	/* PEER_REG send_rcv */
+	will_return(__wrap_nl_send_auto, 0);
+	will_return(__wrap_nl_recvmsgs_default, 0); /* cb_valid */
+	will_return(__wrap_nl_recvmsgs_default, 1); /* cb_ack */
+	will_return(__wrap_nl_recvmsgs_default, NULL);
+	will_return(__wrap_nl_recvmsgs_default, 0); /* success */
+}
+
+/*
+ * rcv: null argument tests — all three rcv variants validate
+ * handler and im against NULL.
+ */
+
+static void rcv_null_args(void **state)
+{
+	struct ipcon_msg im;
+
+	/* NULL handler */
+	assert_int_equal(ipcon_rcv(NULL, &im), -EINVAL);
+	assert_int_equal(ipcon_rcv_nonblock(NULL, &im), -EINVAL);
+	assert_int_equal(ipcon_rcv_timeout(NULL, &im, NULL), -EINVAL);
+
+	/* NULL im with a non-NULL handler */
+	char *strdup_peer_name = NULL;
+	expect_handler_named_single("nullarg_test", &strdup_peer_name);
+	IPCON_HANDLER handler = ipcon_create_handler("nullarg_test", 0);
+	assert_non_null(handler);
+
+	assert_int_equal(ipcon_rcv(handler, NULL), -EINVAL);
+	assert_int_equal(ipcon_rcv_nonblock(handler, NULL), -EINVAL);
+	assert_int_equal(ipcon_rcv_timeout(handler, NULL, NULL), -EINVAL);
+
+	expect_free_handler(strdup_peer_name);
+	ipcon_free_handler(handler);
+}
+
+/*
+ * rcv: ASYNC_IO busy — setting ASYNC_IO flag should make all rcv
+ * variants return -EBUSY.
+ */
+
+static void rcv_async_busy(void **state)
+{
+	char *strdup_peer_name = NULL;
+
+	expect_handler_named_single("async_test", &strdup_peer_name);
+
+	IPCON_HANDLER handler = ipcon_create_handler("async_test", 0);
+	assert_non_null(handler);
+
+	{
+		struct ipcon_peer_handler *iph = handler_to_iph(handler);
+		iph->flags |= IPH_FLG_RCV_IF | IPH_FLG_ASYNC_IO;
+	}
+
+	struct ipcon_msg im;
+	assert_int_equal(ipcon_rcv(handler, &im), -EBUSY);
+	assert_int_equal(ipcon_rcv_nonblock(handler, &im), -EBUSY);
+	assert_int_equal(ipcon_rcv_timeout(handler, &im, NULL), -EBUSY);
+
+	expect_free_handler(strdup_peer_name);
+	ipcon_free_handler(handler);
+}
+
+/*
+ * Helper: construct a netlink message as the IPCON kernel would send.
+ * The caller owns the returned nl_msg and must free it.
+ */
+static struct nl_msg *build_ipcon_usr_msg(const char *peer_name,
+					  const void *payload,
+					  uint32_t payload_len)
+{
+	struct nl_msg *msg = nlmsg_alloc();
+	assert_non_null(msg);
+
+	nlmsg_put(msg, NL_AUTO_PORT, NL_AUTO_SEQ,
+		  IPCON_USR_MSG, IPCONMSG_HDRLEN, NLM_F_REQUEST);
+	nla_put_string(msg, IPCON_ATTR_PEER_NAME, peer_name);
+	nla_put(msg, IPCON_ATTR_DATA, payload_len, payload);
+
+	return msg;
+}
+
+static struct nl_msg *build_ipcon_mcast_msg(const char *peer_name,
+					    const char *group_name,
+					    const void *payload,
+					    uint32_t payload_len)
+{
+	struct nl_msg *msg = nlmsg_alloc();
+	assert_non_null(msg);
+
+	nlmsg_put(msg, NL_AUTO_PORT, NL_AUTO_SEQ,
+		  IPCON_MULTICAST_MSG, IPCONMSG_HDRLEN, NLM_F_REQUEST);
+	nla_put_string(msg, IPCON_ATTR_PEER_NAME, peer_name);
+	nla_put_string(msg, IPCON_ATTR_GROUP_NAME, group_name);
+	nla_put(msg, IPCON_ATTR_DATA, payload_len, payload);
+
+	return msg;
+}
+
+static struct nl_msg *build_ipcon_missing_peer_msg(void)
+{
+	struct nl_msg *msg = nlmsg_alloc();
+	assert_non_null(msg);
+	char payload[] = "no peer name";
+
+	nlmsg_put(msg, NL_AUTO_PORT, NL_AUTO_SEQ,
+		  IPCON_USR_MSG, IPCONMSG_HDRLEN, NLM_F_REQUEST);
+	nla_put(msg, IPCON_ATTR_DATA, strlen(payload) + 1, payload);
+
+	return msg;
+}
+
+static struct nl_msg *build_ipcon_missing_data_msg(void)
+{
+	struct nl_msg *msg = nlmsg_alloc();
+	assert_non_null(msg);
+
+	nlmsg_put(msg, NL_AUTO_PORT, NL_AUTO_SEQ,
+		  IPCON_USR_MSG, IPCONMSG_HDRLEN, NLM_F_REQUEST);
+	nla_put_string(msg, IPCON_ATTR_PEER_NAME, "sender");
+
+	return msg;
+}
+
+static struct nl_msg *build_ipcon_invalid_type_msg(void)
+{
+	struct nl_msg *msg = nlmsg_alloc();
+	assert_non_null(msg);
+
+	/* Use an nlmsg_type that doesn't match any IPCON message type */
+	nlmsg_put(msg, NL_AUTO_PORT, NL_AUTO_SEQ,
+		  IPCON_TYPE_MAX, IPCONMSG_HDRLEN, NLM_F_REQUEST);
+	nla_put_string(msg, IPCON_ATTR_PEER_NAME, "sender");
+	nla_put(msg, IPCON_ATTR_DATA, 4, "data");
+
+	return msg;
+}
+
+/*
+ * ipcon_rcv success path (blocking receive, no select involved)
+ *
+ * Uses a handler created with LIBIPCON_FLG_USE_RCV_IF so r_chan is
+ * properly initialized.  The mock for nl_recvmsgs_default supplies
+ * a crafted IPCON_USR_MSG message, which ipcon_cb_valid stores in
+ * r_chan.ir.msg.  ipcon_recvmsg retrieves it, and the rcv function
+ * parses out peer_name and data.
+ */
+
+/*
+ * Helper: pre-set r_chan.ir.msg and mock nl_recvmsgs_default to
+ * skip the VALID callback.  This avoids the global CB_VALID/CB_ACK
+ * state issues when multiple channels share the mock.
+ *
+ * The mock returns 0 without firing any callback; ipcon_recvmsg
+ * picks up the msg from ic->ir.msg (which we set manually).
+ */
+static void setup_rcv_msg(struct ipcon_peer_handler *iph,
+			  struct nl_msg *mock_msg)
+{
+	/* Clear any stale ir state and pre-set the message */
+	memset(&iph->r_chan.ir, 0, sizeof(iph->r_chan.ir));
+	iph->r_chan.ir.msg = mock_msg;
+
+	/* Mock nl_recvmsgs_default: skip callbacks, return success */
+	will_return(__wrap_nl_recvmsgs_default, 0); /* do_valid */
+	will_return(__wrap_nl_recvmsgs_default, 0); /* do_ack */
+	will_return(__wrap_nl_recvmsgs_default, 0); /* ret */
+}
+
+static void rcv_success(void **state)
+{
+	char *strdup_peer_name = NULL;
+	char payload[] = "hello rcv";
+	char *sender = "sender_a";
+
+	expect_handler_named_single_with_rcvif("rcv_ok", &strdup_peer_name);
+
+	IPCON_HANDLER handler = ipcon_create_handler("rcv_ok",
+						      LIBIPCON_FLG_USE_RCV_IF);
+	assert_non_null(handler);
+
+	struct nl_msg *mock_msg = build_ipcon_usr_msg(
+		sender, payload, strlen(payload) + 1);
+	assert_non_null(mock_msg);
+
+	struct ipcon_peer_handler *iph = handler_to_iph(handler);
+	setup_rcv_msg(iph, mock_msg);
+
+	struct ipcon_msg im;
+	int ret = ipcon_rcv(handler, &im);
+	assert_int_equal(ret, 0);
+	assert_int_equal(im.type, LIBIPCON_NORMAL_MSG);
+	assert_string_equal(im.peer, sender);
+	assert_int_equal(im.len, strlen(payload) + 1);
+	assert_memory_equal(im.buf, payload, strlen(payload) + 1);
+
+	expect_free_handler(strdup_peer_name);
+	ipcon_free_handler(handler);
+}
+
+/*
+ * rcv: invalid message type — IPCON_TYPE_MAX is not USR_MSG or
+ * MULTICAST_MSG, so the function returns -EREMOTEIO.
+ */
+
+static void rcv_invalid_msg_type(void **state)
+{
+	char *strdup_peer_name = NULL;
+
+	expect_handler_named_single_with_rcvif("rcv_badtype",
+					      &strdup_peer_name);
+
+	IPCON_HANDLER handler = ipcon_create_handler("rcv_badtype",
+						      LIBIPCON_FLG_USE_RCV_IF);
+	assert_non_null(handler);
+
+	struct nl_msg *mock_msg = build_ipcon_invalid_type_msg();
+	assert_non_null(mock_msg);
+
+	struct ipcon_peer_handler *iph = handler_to_iph(handler);
+	setup_rcv_msg(iph, mock_msg);
+
+	struct ipcon_msg im;
+	int ret = ipcon_rcv(handler, &im);
+	assert_int_equal(ret, -EREMOTEIO);
+
+	expect_free_handler(strdup_peer_name);
+	ipcon_free_handler(handler);
+}
+
+/*
+ * rcv: missing PEER_NAME attribute — the message type is USR_MSG
+ * but without IPCON_ATTR_PEER_NAME, the function returns -EREMOTEIO.
+ */
+
+static void rcv_missing_peer(void **state)
+{
+	char *strdup_peer_name = NULL;
+
+	expect_handler_named_single_with_rcvif("rcv_nopeer",
+					      &strdup_peer_name);
+
+	IPCON_HANDLER handler = ipcon_create_handler("rcv_nopeer",
+						      LIBIPCON_FLG_USE_RCV_IF);
+	assert_non_null(handler);
+
+	struct nl_msg *mock_msg = build_ipcon_missing_peer_msg();
+	assert_non_null(mock_msg);
+
+	struct ipcon_peer_handler *iph = handler_to_iph(handler);
+	setup_rcv_msg(iph, mock_msg);
+
+	struct ipcon_msg im;
+	int ret = ipcon_rcv(handler, &im);
+	assert_int_equal(ret, -EREMOTEIO);
+
+	expect_free_handler(strdup_peer_name);
+	ipcon_free_handler(handler);
+}
+
+/*
+ * rcv: missing DATA attribute — the message type is USR_MSG with
+ * a peer name, but without IPCON_ATTR_DATA the function returns
+ * -EREMOTEIO.
+ */
+
+static void rcv_missing_data(void **state)
+{
+	char *strdup_peer_name = NULL;
+
+	expect_handler_named_single_with_rcvif("rcv_nodata",
+					      &strdup_peer_name);
+
+	IPCON_HANDLER handler = ipcon_create_handler("rcv_nodata",
+						      LIBIPCON_FLG_USE_RCV_IF);
+	assert_non_null(handler);
+
+	struct nl_msg *mock_msg = build_ipcon_missing_data_msg();
+	assert_non_null(mock_msg);
+
+	struct ipcon_peer_handler *iph = handler_to_iph(handler);
+	setup_rcv_msg(iph, mock_msg);
+
+	struct ipcon_msg im;
+	int ret = ipcon_rcv(handler, &im);
+	assert_int_equal(ret, -EREMOTEIO);
+
+	expect_free_handler(strdup_peer_name);
+	ipcon_free_handler(handler);
+}
+
+/*
+ * rcv: multicast message — receives IPCON_MULTICAST_MSG with
+ * PEER_NAME, GROUP_NAME and DATA; verifies im fields.
+ */
+
+static void rcv_multicast_msg(void **state)
+{
+	char *strdup_peer_name = NULL;
+	char payload[] = "group hello";
+	char *sender = "mcast_sender";
+	char *group = "my_group";
+
+	expect_handler_named_single_with_rcvif("rcv_mcast",
+					      &strdup_peer_name);
+
+	IPCON_HANDLER handler = ipcon_create_handler("rcv_mcast",
+						      LIBIPCON_FLG_USE_RCV_IF);
+	assert_non_null(handler);
+
+	struct nl_msg *mock_msg = build_ipcon_mcast_msg(
+		sender, group, payload, strlen(payload) + 1);
+	assert_non_null(mock_msg);
+
+	struct ipcon_peer_handler *iph = handler_to_iph(handler);
+	setup_rcv_msg(iph, mock_msg);
+
+	struct ipcon_msg im;
+	int ret = ipcon_rcv(handler, &im);
+	assert_int_equal(ret, 0);
+	assert_int_equal(im.type, LIBIPCON_GROUP_MSG);
+	assert_string_equal(im.peer, sender);
+	assert_string_equal(im.group, group);
+	assert_int_equal(im.len, strlen(payload) + 1);
+	assert_memory_equal(im.buf, payload, strlen(payload) + 1);
+
+	expect_free_handler(strdup_peer_name);
+	ipcon_free_handler(handler);
+}
+
+/*
+ * rcv: kevent message — receives IPCON_MULTICAST_MSG with
+ * group_name = "ipcon_kevent", which should set im.type to
+ * LIBIPCON_KEVENT_MSG.
+ */
+
+static void rcv_kevent_msg(void **state)
+{
+	char *strdup_peer_name = NULL;
+	char payload[] = "kevent data";
+	char *sender = "kernel";
+	char *kevent_grp = LIBIPCON_KERNEL_GROUP_NAME;
+
+	expect_handler_named_single_with_rcvif("rcv_kevent",
+					      &strdup_peer_name);
+
+	IPCON_HANDLER handler = ipcon_create_handler("rcv_kevent",
+						      LIBIPCON_FLG_USE_RCV_IF);
+	assert_non_null(handler);
+
+	struct nl_msg *mock_msg = build_ipcon_mcast_msg(
+		sender, kevent_grp, payload, strlen(payload) + 1);
+	assert_non_null(mock_msg);
+
+	struct ipcon_peer_handler *iph = handler_to_iph(handler);
+	setup_rcv_msg(iph, mock_msg);
+
+	struct ipcon_msg im;
+	int ret = ipcon_rcv(handler, &im);
+	assert_int_equal(ret, 0);
+	assert_int_equal(im.type, LIBIPCON_KEVENT_MSG);
+	assert_string_equal(im.peer, sender);
+	assert_string_equal(im.group, kevent_grp);
 
 	expect_free_handler(strdup_peer_name);
 	ipcon_free_handler(handler);
@@ -614,6 +1020,14 @@ int ipcon_api_tests_run(void *state)
 
 		/* rcv */
 		cmocka_unit_test(rcv_no_rcv_if),
+		cmocka_unit_test(rcv_null_args),
+		cmocka_unit_test(rcv_async_busy),
+		cmocka_unit_test(rcv_success),
+		cmocka_unit_test(rcv_invalid_msg_type),
+		cmocka_unit_test(rcv_missing_peer),
+		cmocka_unit_test(rcv_missing_data),
+		cmocka_unit_test(rcv_multicast_msg),
+		cmocka_unit_test(rcv_kevent_msg),
 	};
 
 	return cmocka_run_group_tests(tests, NULL, NULL);
