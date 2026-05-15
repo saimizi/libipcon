@@ -1333,6 +1333,40 @@ static void free_handler_full(void **state)
 	ipcon_free_handler(handler);
 }
 
+/*
+ * ipcon_get_ctrl_fd tests
+ *
+ * Unlike get_read_fd/get_write_fd, ctrl_fd has no flag guard — c_chan
+ * is always initialized during create_handler.
+ */
+
+extern int ipcon_get_ctrl_fd(IPCON_HANDLER handler);
+
+static void ctrl_fd_null_handler(void **state)
+{
+	int fd = ipcon_get_ctrl_fd(NULL);
+	assert_int_equal(fd, -EBADF);
+}
+
+static void ctrl_fd_success(void **state)
+{
+	char *strdup_peer_name = NULL;
+
+	expect_handler_named_single("ctrl_ok", &strdup_peer_name);
+
+	IPCON_HANDLER handler = ipcon_create_handler("ctrl_ok", 0);
+	assert_non_null(handler);
+
+	/* c_chan.sk is alloc'd via __real_nl_socket_alloc_cb during
+	 * create_handler, so nl_socket_get_fd returns s_fd (-1 when
+	 * nl_connect was never called). */
+	int fd = ipcon_get_ctrl_fd(handler);
+	assert_int_equal(fd, -1);
+
+	expect_free_handler(strdup_peer_name);
+	ipcon_free_handler(handler);
+}
+
 int ipcon_api_tests_run(void *state)
 {
 	static struct CMUnitTest tests[] = {
@@ -1389,6 +1423,10 @@ int ipcon_api_tests_run(void *state)
 		cmocka_unit_test(get_write_fd_success),
 		/* free_handler */
 		cmocka_unit_test(free_handler_full),
+
+		/* ctrl_fd */
+		cmocka_unit_test(ctrl_fd_null_handler),
+		cmocka_unit_test(ctrl_fd_success),
 	};
 
 	return cmocka_run_group_tests(tests, NULL, NULL);
