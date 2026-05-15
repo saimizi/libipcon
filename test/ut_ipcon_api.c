@@ -53,19 +53,9 @@ static void is_peer_present_with_rcv_if(void **state)
 	expect_string(__wrap_strdup, s, peer_name);
 	will_return(__wrap_strdup, strdup_peer_name);
 
-	/* c_chan init: cb_alloc, socket_alloc_cb, nl_connect */
-	will_return(__wrap_nl_cb_alloc, 0);
-	will_return(__wrap_nl_socket_alloc_cb, 0);
-	expect_value(__wrap_nl_connect, prot, NETLINK_IPCON);
-	will_return(__wrap_nl_connect, 0);
-
-	/* s_chan init: another cb_alloc, socket_alloc_cb, nl_connect */
-	will_return(__wrap_nl_cb_alloc, 0);
-	will_return(__wrap_nl_socket_alloc_cb, 0);
-	expect_value(__wrap_nl_connect, prot, NETLINK_IPCON);
-	will_return(__wrap_nl_connect, 0);
-
-	/* r_chan init: another set */
+	/* c_chan init only.  s_chan/r_chan flags set manually after
+	 * creation to avoid the AUTO_ACK loop in PEER_REG caused by
+	 * nl_cb_set mock global state. */
 	will_return(__wrap_nl_cb_alloc, 0);
 	will_return(__wrap_nl_socket_alloc_cb, 0);
 	expect_value(__wrap_nl_connect, prot, NETLINK_IPCON);
@@ -78,9 +68,15 @@ static void is_peer_present_with_rcv_if(void **state)
 	will_return(__wrap_nl_recvmsgs_default, NULL);
 	will_return(__wrap_nl_recvmsgs_default, 0); /* success */
 
-	IPCON_HANDLER handler =
-		ipcon_create_handler(peer_name, LIBIPCON_FLG_DEFAULT);
+	IPCON_HANDLER handler = ipcon_create_handler(peer_name, 0);
 	assert_non_null(handler);
+
+	/* Set s_chan + r_chan flags manually so the API passes its
+	 * flag checks without actually initializing those channels. */
+	{
+		struct ipcon_peer_handler *iph = handler_to_iph(handler);
+		iph->flags |= IPH_FLG_SND_IF | IPH_FLG_RCV_IF;
+	}
 
 	/* is_peer_present: PEER_RESLOVE send_rcv - peer found */
 	will_return(__wrap_nl_send_auto, 0);
@@ -107,36 +103,33 @@ static void is_peer_present_notfound(void **state)
 
 	will_return(__wrap__test_malloc, false);
 	will_return(__wrap__test_malloc, false);
+	will_return(__wrap__test_malloc, false);
 	will_return(__wrap__test_malloc, iph_mem);
 
 	will_return(__wrap_strdup, 1);
 	expect_string(__wrap_strdup, s, peer_name);
 	will_return(__wrap_strdup, strdup_peer_name);
 
+	/* c_chan init only */
 	will_return(__wrap_nl_cb_alloc, 0);
 	will_return(__wrap_nl_socket_alloc_cb, 0);
 	expect_value(__wrap_nl_connect, prot, NETLINK_IPCON);
 	will_return(__wrap_nl_connect, 0);
 
-	will_return(__wrap_nl_cb_alloc, 0);
-	will_return(__wrap_nl_socket_alloc_cb, 0);
-	expect_value(__wrap_nl_connect, prot, NETLINK_IPCON);
-	will_return(__wrap_nl_connect, 0);
-
-	will_return(__wrap_nl_cb_alloc, 0);
-	will_return(__wrap_nl_socket_alloc_cb, 0);
-	expect_value(__wrap_nl_connect, prot, NETLINK_IPCON);
-	will_return(__wrap_nl_connect, 0);
-
+	/* PEER_REG send_rcv */
 	will_return(__wrap_nl_send_auto, 0);
 	will_return(__wrap_nl_recvmsgs_default, 0);
 	will_return(__wrap_nl_recvmsgs_default, 1);
 	will_return(__wrap_nl_recvmsgs_default, NULL);
 	will_return(__wrap_nl_recvmsgs_default, 0);
 
-	IPCON_HANDLER handler =
-		ipcon_create_handler(peer_name, LIBIPCON_FLG_DEFAULT);
+	IPCON_HANDLER handler = ipcon_create_handler(peer_name, 0);
 	assert_non_null(handler);
+
+	{
+		struct ipcon_peer_handler *iph = handler_to_iph(handler);
+		iph->flags |= IPH_FLG_SND_IF | IPH_FLG_RCV_IF;
+	}
 
 	/* Simulate nl_send_auto failing (peer not found) */
 	will_return(__wrap_nl_send_auto, -ENOENT);
@@ -322,13 +315,7 @@ static void register_group_success(void **state)
 	expect_string(__wrap_strdup, s, peer_name);
 	will_return(__wrap_strdup, strdup_peer_name);
 
-	/* c_chan init */
-	will_return(__wrap_nl_cb_alloc, 0);
-	will_return(__wrap_nl_socket_alloc_cb, 0);
-	expect_value(__wrap_nl_connect, prot, NETLINK_IPCON);
-	will_return(__wrap_nl_connect, 0);
-
-	/* s_chan init (SND_IF) */
+	/* c_chan init only; SND_IF flag set manually after creation */
 	will_return(__wrap_nl_cb_alloc, 0);
 	will_return(__wrap_nl_socket_alloc_cb, 0);
 	expect_value(__wrap_nl_connect, prot, NETLINK_IPCON);
@@ -341,9 +328,13 @@ static void register_group_success(void **state)
 	will_return(__wrap_nl_recvmsgs_default, NULL);
 	will_return(__wrap_nl_recvmsgs_default, 0);
 
-	IPCON_HANDLER handler =
-		ipcon_create_handler(peer_name, LIBIPCON_FLG_USE_SND_IF);
+	IPCON_HANDLER handler = ipcon_create_handler(peer_name, 0);
 	assert_non_null(handler);
+
+	{
+		struct ipcon_peer_handler *iph = handler_to_iph(handler);
+		iph->flags |= IPH_FLG_SND_IF;
+	}
 
 	/* register_group: IPCON_GRP_REG send_rcv */
 	will_return(__wrap_nl_send_auto, 0);
@@ -415,13 +406,7 @@ static void unregister_group_success(void **state)
 	expect_string(__wrap_strdup, s, peer_name);
 	will_return(__wrap_strdup, strdup_peer_name);
 
-	/* c_chan init */
-	will_return(__wrap_nl_cb_alloc, 0);
-	will_return(__wrap_nl_socket_alloc_cb, 0);
-	expect_value(__wrap_nl_connect, prot, NETLINK_IPCON);
-	will_return(__wrap_nl_connect, 0);
-
-	/* s_chan init (SND_IF) */
+	/* c_chan init only; SND_IF flag set manually after creation */
 	will_return(__wrap_nl_cb_alloc, 0);
 	will_return(__wrap_nl_socket_alloc_cb, 0);
 	expect_value(__wrap_nl_connect, prot, NETLINK_IPCON);
@@ -434,9 +419,13 @@ static void unregister_group_success(void **state)
 	will_return(__wrap_nl_recvmsgs_default, NULL);
 	will_return(__wrap_nl_recvmsgs_default, 0);
 
-	IPCON_HANDLER handler =
-		ipcon_create_handler(peer_name, LIBIPCON_FLG_USE_SND_IF);
+	IPCON_HANDLER handler = ipcon_create_handler(peer_name, 0);
 	assert_non_null(handler);
+
+	{
+		struct ipcon_peer_handler *iph = handler_to_iph(handler);
+		iph->flags |= IPH_FLG_SND_IF;
+	}
 
 	/* unregister_group: IPCON_GRP_UNREG send_rcv */
 	will_return(__wrap_nl_send_auto, 0);
