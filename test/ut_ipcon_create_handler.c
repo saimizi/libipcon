@@ -110,9 +110,11 @@ static void ipcon_create_handler_chan_init_fail(void **state)
 	expect_string(__wrap_strdup, s, peer_name);
 	will_return(__wrap_strdup, strdup_peer_name);
 
-	/* Fail ipcon_chan_init() by returning NULL from nl_socket_alloc() */
-	will_return(__wrap_nl_cb_alloc, 0);
-	will_return(__wrap_nl_socket_alloc_cb, 1);
+	/* Fail at nl_cb_alloc so we never reach nl_connect with a NULL socket
+	 * (which crashes via assert_non_null in the mock).  Returning NULL from
+	 * nl_cb_alloc hits ret = -ENOMEM and exits cleanly without poisoning
+	 * the will_return queue for subsequent tests. */
+	will_return(__wrap_nl_cb_alloc, 1);
 
 	/* free cloned peer name */
 	will_return(__wrap__test_free, true);

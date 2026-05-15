@@ -13,6 +13,7 @@ set(UT_SOURCES
     ut_main.c
     ut_ipcon_create_handler.c
     ut_ipcon.c
+    ut_ipcon_api.c
 )
 
 add_executable(ut_ipcon ${UT_SOURCES})
