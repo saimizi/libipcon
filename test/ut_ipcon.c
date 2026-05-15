@@ -56,7 +56,6 @@ static void expect_create_handler_named_single(char **strdup_out)
 
 	/* PEER_REG send_rcv */
 	will_return(__wrap_nl_send_auto, 0);
-	/* nl_recvmsgs_default: skip valid, do ack, return 0 */
 	will_return(__wrap_nl_recvmsgs_default, 0);
 	will_return(__wrap_nl_recvmsgs_default, 1);
 	will_return(__wrap_nl_recvmsgs_default, NULL);
@@ -80,10 +79,8 @@ static void selfname_with_name(void **state)
 	assert_non_null(returned_name);
 	assert_string_equal(returned_name, "test_peer");
 
-	/* free(iph->name): check=true, verify static buffer */
 	will_return(__wrap__test_free, true);
 	will_return(__wrap__test_free, strdup_peer_name);
-	/* free(iph): check=false, call real free on heap alloc */
 	will_return(__wrap__test_free, false);
 	ipcon_free_handler(handler);
 }
@@ -193,125 +190,6 @@ static void api_trivial_checks(void **state)
 /*
  * Extended ipcon_create_handler tests
  */
-
-{
-	/*
-	 * LIBIPCON_FLG_DEFAULT = RCV_IF | SND_IF = 3 channels
-	 * Uses exact same pattern as the single-channel case
-	 * but with 3 channel inits + 1 PEER_REG.
-	 */
-
-	const char *peer_name = "default_test";
-	static char sn1[32];
-	strcpy(sn1, peer_name);
-
-	will_return(__wrap__test_malloc, false);
-	will_return(__wrap__test_malloc, true);
-
-	will_return(__wrap_strdup, 1);
-	expect_string(__wrap_strdup, s, peer_name);
-	will_return(__wrap_strdup, sn1);
-
-	/* c_chan init */
-	will_return(__wrap_nl_cb_alloc, 0);
-	will_return(__wrap_nl_socket_alloc_cb, 0);
-	expect_value(__wrap_nl_connect, prot, NETLINK_IPCON);
-	will_return(__wrap_nl_connect, 0);
-
-	/* s_chan init (SND_IF) */
-	will_return(__wrap_nl_cb_alloc, 0);
-	will_return(__wrap_nl_socket_alloc_cb, 0);
-	expect_value(__wrap_nl_connect, prot, NETLINK_IPCON);
-	will_return(__wrap_nl_connect, 0);
-
-	/* r_chan init (RCV_IF) */
-	will_return(__wrap_nl_cb_alloc, 0);
-	will_return(__wrap_nl_socket_alloc_cb, 0);
-	expect_value(__wrap_nl_connect, prot, NETLINK_IPCON);
-	will_return(__wrap_nl_connect, 0);
-
-	/* PEER_REG + 16 extra rounds */
-	will_return(__wrap_nl_send_auto, 0);
-	will_return(__wrap_nl_recvmsgs_default, 0);
-	will_return(__wrap_nl_recvmsgs_default, 1);
-	will_return(__wrap_nl_recvmsgs_default, NULL);
-	will_return(__wrap_nl_recvmsgs_default, 0);
-	will_return(__wrap_nl_recvmsgs_default, 0);
-	will_return(__wrap_nl_recvmsgs_default, 1);
-	will_return(__wrap_nl_recvmsgs_default, NULL);
-	will_return(__wrap_nl_recvmsgs_default, 0);
-	will_return(__wrap_nl_recvmsgs_default, 0);
-	will_return(__wrap_nl_recvmsgs_default, 1);
-	will_return(__wrap_nl_recvmsgs_default, NULL);
-	will_return(__wrap_nl_recvmsgs_default, 0);
-	will_return(__wrap_nl_recvmsgs_default, 0);
-	will_return(__wrap_nl_recvmsgs_default, 1);
-	will_return(__wrap_nl_recvmsgs_default, NULL);
-	will_return(__wrap_nl_recvmsgs_default, 0);
-	will_return(__wrap_nl_recvmsgs_default, 0);
-	will_return(__wrap_nl_recvmsgs_default, 1);
-	will_return(__wrap_nl_recvmsgs_default, NULL);
-	will_return(__wrap_nl_recvmsgs_default, 0);
-	will_return(__wrap_nl_recvmsgs_default, 0);
-	will_return(__wrap_nl_recvmsgs_default, 1);
-	will_return(__wrap_nl_recvmsgs_default, NULL);
-	will_return(__wrap_nl_recvmsgs_default, 0);
-	will_return(__wrap_nl_recvmsgs_default, 0);
-	will_return(__wrap_nl_recvmsgs_default, 1);
-	will_return(__wrap_nl_recvmsgs_default, NULL);
-	will_return(__wrap_nl_recvmsgs_default, 0);
-	will_return(__wrap_nl_recvmsgs_default, 0);
-	will_return(__wrap_nl_recvmsgs_default, 1);
-	will_return(__wrap_nl_recvmsgs_default, NULL);
-	will_return(__wrap_nl_recvmsgs_default, 0);
-	will_return(__wrap_nl_recvmsgs_default, 0);
-	will_return(__wrap_nl_recvmsgs_default, 1);
-	will_return(__wrap_nl_recvmsgs_default, NULL);
-	will_return(__wrap_nl_recvmsgs_default, 0);
-	will_return(__wrap_nl_recvmsgs_default, 0);
-	will_return(__wrap_nl_recvmsgs_default, 1);
-	will_return(__wrap_nl_recvmsgs_default, NULL);
-	will_return(__wrap_nl_recvmsgs_default, 0);
-	will_return(__wrap_nl_recvmsgs_default, 0);
-	will_return(__wrap_nl_recvmsgs_default, 1);
-	will_return(__wrap_nl_recvmsgs_default, NULL);
-	will_return(__wrap_nl_recvmsgs_default, 0);
-	will_return(__wrap_nl_recvmsgs_default, 0);
-	will_return(__wrap_nl_recvmsgs_default, 1);
-	will_return(__wrap_nl_recvmsgs_default, NULL);
-	will_return(__wrap_nl_recvmsgs_default, 0);
-	will_return(__wrap_nl_recvmsgs_default, 0);
-	will_return(__wrap_nl_recvmsgs_default, 1);
-	will_return(__wrap_nl_recvmsgs_default, NULL);
-	will_return(__wrap_nl_recvmsgs_default, 0);
-	will_return(__wrap_nl_recvmsgs_default, 0);
-	will_return(__wrap_nl_recvmsgs_default, 1);
-	will_return(__wrap_nl_recvmsgs_default, NULL);
-	will_return(__wrap_nl_recvmsgs_default, 0);
-	will_return(__wrap_nl_recvmsgs_default, 0);
-	will_return(__wrap_nl_recvmsgs_default, 1);
-	will_return(__wrap_nl_recvmsgs_default, NULL);
-	will_return(__wrap_nl_recvmsgs_default, 0);
-	will_return(__wrap_nl_recvmsgs_default, 0);
-	will_return(__wrap_nl_recvmsgs_default, 1);
-	will_return(__wrap_nl_recvmsgs_default, NULL);
-	will_return(__wrap_nl_recvmsgs_default, 0);
-
-	IPCON_HANDLER handler =
-		ipcon_create_handler(peer_name, LIBIPCON_FLG_DEFAULT);
-	assert_non_null(handler);
-
-	struct ipcon_peer_handler *iph = handler_to_iph(handler);
-	assert_non_null(iph);
-
-	assert_true(iph->flags & IPH_FLG_RCV_IF);
-	assert_true(iph->flags & IPH_FLG_SND_IF);
-
-	will_return(__wrap__test_free, true);
-	will_return(__wrap__test_free, sn1);
-	will_return(__wrap__test_free, false);
-	ipcon_free_handler(handler);
-}
 
 static void create_handler_no_flags(void **state)
 {
