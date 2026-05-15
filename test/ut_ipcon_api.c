@@ -185,10 +185,13 @@ static void register_group_invalid_name(void **state)
 	IPCON_HANDLER handler = ipcon_create_handler(peer_name, 0);
 	assert_non_null(handler);
 
-	/* Without SND_IF, register_group fails */
+	/* Without SND_IF, register/unregister fail.
+	 * Note: unregister_group checks SND_IF before name validity
+	 * (unlike register_group which checks valid_name first), so
+	 * unregister with empty name returns -EPERM, not -EINVAL. */
 	assert_int_equal(ipcon_register_group(handler, ""), -EINVAL);
 	assert_int_equal(ipcon_register_group(handler, NULL), -EINVAL);
-	assert_int_equal(ipcon_unregister_group(handler, ""), -EINVAL);
+	assert_int_equal(ipcon_unregister_group(handler, ""), -EPERM);
 	assert_int_equal(ipcon_unregister_group(handler, NULL), -EINVAL);
 
 	will_return(__wrap__test_free, true);
