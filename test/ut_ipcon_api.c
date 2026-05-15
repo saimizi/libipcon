@@ -70,6 +70,42 @@ static void expect_free_handler(char *strdup_peer_name)
 	will_return(__wrap__test_free, false);
 }
 
+/* Dummy ACK callback for s_chan — sets ACK_OK to stop the AUTO_ACK loop. */
+static int ack_ok(struct nl_msg *msg, void *arg)
+{
+	(void)msg;
+	struct ipconmsg_result *ir = arg;
+	ir->flags |= IR_FLG_ACK_OK;
+	return NL_STOP;
+}
+
+/*
+ * Helper: allocate a real s_chan socket for a single-channel handler
+ * so ipcon_send_unicast / ipcon_send_multicast can run.
+ *
+ * Uses real libnl allocators, bypassing the mock layer, so no
+ * will_return entries are consumed.  The ACK callback is a local
+ * function that marks ACK_OK on s_chan.ir, preventing the AUTO_ACK
+ * loop from spinning forever.
+ */
+static void init_s_chan_sk(struct ipcon_peer_handler *iph)
+{
+	extern struct nl_cb *__real_nl_cb_alloc(enum nl_cb_kind);
+	extern struct nl_sock *__real_nl_socket_alloc_cb(struct nl_cb *);
+
+	struct nl_cb *cb = __real_nl_cb_alloc(NL_CB_CUSTOM);
+	assert_non_null(cb);
+	nl_cb_set(cb, NL_CB_ACK, NL_CB_CUSTOM, ack_ok, &iph->s_chan.ir);
+	iph->s_chan.sk = __real_nl_socket_alloc_cb(cb);
+	assert_non_null(iph->s_chan.sk);
+	nl_cb_put(cb);
+	iph->s_chan.ir.flags = 0;
+	iph->s_chan.ir.msg = NULL;
+	pthread_mutex_init(&iph->s_chan.mutex, NULL);
+	iph->s_chan.mutex_initialized = true;
+	iph->flags |= IPH_FLG_SND_IF;
+}
+
 /*
  * is_peer_present tests
  * is_peer_present creates a PEER_RESLOVE message and sends it via c_chan.
@@ -219,6 +255,235 @@ static void join_leave_no_rcv_if(void **state)
 }
 
 /*
+ * ipcon_send_unicast tests
+ *
+ * Sends IPCON_USR_MSG via s_chan with PEER_NAME and DATA attributes.
+ * Requires IPH_FLG_SND_IF.  Uses single-channel handler +
+ * init_s_chan_sk to set up s_chan without polluting the mock state.
+ */
+
+static void send_unicast_success(void **state)
+{
+	char *strdup_peer_name = NULL;
+	char *target = "peer_b";
+	char payload[] = "hello";
+
+	expect_handler_named_single("send_test", &strdup_peer_name);
+
+	IPCON_HANDLER handler = ipcon_create_handler("send_test", 0);
+	assert_non_null(handler);
+
+	{
+		struct ipcon_peer_handler *iph = handler_to_iph(handler);
+		init_s_chan_sk(iph);
+	}
+
+	/* send_unicast: IPCON_USR_MSG send_rcv on s_chan */
+	will_return(__wrap_nl_send_auto, 0);
+	will_return(__wrap_nl_recvmsgs_default, 0);
+	will_return(__wrap_nl_recvmsgs_default, 1);
+	will_return(__wrap_nl_recvmsgs_default, NULL);
+	will_return(__wrap_nl_recvmsgs_default, 0);
+
+	int ret = ipcon_send_unicast(handler, target, payload,
+				     strlen(payload) + 1);
+	assert_int_equal(ret, 0);
+
+	expect_free_handler(strdup_peer_name);
+	ipcon_free_handler(handler);
+}
+
+static void send_unicast_no_snd_if(void **state)
+{
+	char *strdup_peer_name = NULL;
+
+	expect_handler_named_single("nosend_test", &strdup_peer_name);
+
+	IPCON_HANDLER handler = ipcon_create_handler("nosend_test", 0);
+	assert_non_null(handler);
+
+	assert_int_equal(ipcon_send_unicast(handler, "peer", "data", 4),
+			 -EPERM);
+
+	expect_free_handler(strdup_peer_name);
+	ipcon_free_handler(handler);
+}
+
+static void send_unicast_invalid_name(void **state)
+{
+	char *strdup_peer_name = NULL;
+
+	expect_handler_named_single("iname_test", &strdup_peer_name);
+
+	IPCON_HANDLER handler = ipcon_create_handler("iname_test", 0);
+	assert_non_null(handler);
+
+	{
+		struct ipcon_peer_handler *iph = handler_to_iph(handler);
+		init_s_chan_sk(iph);
+	}
+
+	assert_int_equal(ipcon_send_unicast(handler, "", "data", 4), -EINVAL);
+
+	expect_free_handler(strdup_peer_name);
+	ipcon_free_handler(handler);
+}
+
+static void send_unicast_size_zero(void **state)
+{
+	char *strdup_peer_name = NULL;
+
+	expect_handler_named_single("size0_test", &strdup_peer_name);
+
+	IPCON_HANDLER handler = ipcon_create_handler("size0_test", 0);
+	assert_non_null(handler);
+
+	{
+		struct ipcon_peer_handler *iph = handler_to_iph(handler);
+		init_s_chan_sk(iph);
+	}
+
+	/* size == 0 should fail */
+	assert_int_equal(ipcon_send_unicast(handler, "peer", "data", 0),
+			 -EINVAL);
+
+	expect_free_handler(strdup_peer_name);
+	ipcon_free_handler(handler);
+}
+
+static void send_unicast_size_too_large(void **state)
+{
+	char *strdup_peer_name = NULL;
+	char big_payload[2049];
+
+	memset(big_payload, 'x', sizeof(big_payload));
+
+	expect_handler_named_single("big_test", &strdup_peer_name);
+
+	IPCON_HANDLER handler = ipcon_create_handler("big_test", 0);
+	assert_non_null(handler);
+
+	{
+		struct ipcon_peer_handler *iph = handler_to_iph(handler);
+		init_s_chan_sk(iph);
+	}
+
+	/* size > MAX_IPCONMSG_DATA_SIZE should fail */
+	assert_int_equal(ipcon_send_unicast(handler, "peer", big_payload,
+					    sizeof(big_payload)),
+			 -EINVAL);
+
+	expect_free_handler(strdup_peer_name);
+	ipcon_free_handler(handler);
+}
+
+/*
+ * ipcon_send_multicast tests
+ *
+ * Sends IPCON_MULTICAST_MSG via s_chan with GROUP_NAME and optional DATA/FLAG.
+ * Requires IPH_FLG_SND_IF.
+ */
+
+static void send_multicast_success(void **state)
+{
+	char *strdup_peer_name = NULL;
+	char *group_name = "mcast_grp";
+	char payload[] = "group msg";
+
+	expect_handler_named_single("mcast_test", &strdup_peer_name);
+
+	IPCON_HANDLER handler = ipcon_create_handler("mcast_test", 0);
+	assert_non_null(handler);
+
+	{
+		struct ipcon_peer_handler *iph = handler_to_iph(handler);
+		init_s_chan_sk(iph);
+	}
+
+	/* send_multicast: IPCON_MULTICAST_MSG send_rcv on s_chan */
+	will_return(__wrap_nl_send_auto, 0);
+	will_return(__wrap_nl_recvmsgs_default, 0);
+	will_return(__wrap_nl_recvmsgs_default, 1);
+	will_return(__wrap_nl_recvmsgs_default, NULL);
+	will_return(__wrap_nl_recvmsgs_default, 0);
+
+	int ret = ipcon_send_multicast(handler, group_name, payload,
+				       strlen(payload) + 1, 0);
+	assert_int_equal(ret, 0);
+
+	expect_free_handler(strdup_peer_name);
+	ipcon_free_handler(handler);
+}
+
+static void send_multicast_sync(void **state)
+{
+	char *strdup_peer_name = NULL;
+	char *group_name = "sync_grp";
+	char payload[] = "sync msg";
+
+	expect_handler_named_single("msync_test", &strdup_peer_name);
+
+	IPCON_HANDLER handler = ipcon_create_handler("msync_test", 0);
+	assert_non_null(handler);
+
+	{
+		struct ipcon_peer_handler *iph = handler_to_iph(handler);
+		init_s_chan_sk(iph);
+	}
+
+	/* send_multicast with sync=1 */
+	will_return(__wrap_nl_send_auto, 0);
+	will_return(__wrap_nl_recvmsgs_default, 0);
+	will_return(__wrap_nl_recvmsgs_default, 1);
+	will_return(__wrap_nl_recvmsgs_default, NULL);
+	will_return(__wrap_nl_recvmsgs_default, 0);
+
+	int ret = ipcon_send_multicast(handler, group_name, payload,
+				       strlen(payload) + 1, 1);
+	assert_int_equal(ret, 0);
+
+	expect_free_handler(strdup_peer_name);
+	ipcon_free_handler(handler);
+}
+
+static void send_multicast_no_snd_if(void **state)
+{
+	char *strdup_peer_name = NULL;
+
+	expect_handler_named_single("nomcast_test", &strdup_peer_name);
+
+	IPCON_HANDLER handler = ipcon_create_handler("nomcast_test", 0);
+	assert_non_null(handler);
+
+	assert_int_equal(ipcon_send_multicast(handler, "grp", "data", 4, 0),
+			 -EPERM);
+
+	expect_free_handler(strdup_peer_name);
+	ipcon_free_handler(handler);
+}
+
+static void send_multicast_invalid_name(void **state)
+{
+	char *strdup_peer_name = NULL;
+
+	expect_handler_named_single("inmcast_test", &strdup_peer_name);
+
+	IPCON_HANDLER handler = ipcon_create_handler("inmcast_test", 0);
+	assert_non_null(handler);
+
+	{
+		struct ipcon_peer_handler *iph = handler_to_iph(handler);
+		init_s_chan_sk(iph);
+	}
+
+	assert_int_equal(ipcon_send_multicast(handler, "", "data", 4, 0),
+			 -EINVAL);
+
+	expect_free_handler(strdup_peer_name);
+	ipcon_free_handler(handler);
+}
+
+/*
  * ipcon_register_group / ipcon_unregister_group success paths
  *
  * register_group sends IPCON_GRP_REG via c_chan and expects ack.
@@ -329,6 +594,19 @@ int ipcon_api_tests_run(void *state)
 		cmocka_unit_test(register_group_no_snd_if),
 		cmocka_unit_test(unregister_group_success),
 		cmocka_unit_test(unregister_group_no_snd_if),
+
+		/* send_unicast */
+		cmocka_unit_test(send_unicast_success),
+		cmocka_unit_test(send_unicast_no_snd_if),
+		cmocka_unit_test(send_unicast_invalid_name),
+		cmocka_unit_test(send_unicast_size_zero),
+		cmocka_unit_test(send_unicast_size_too_large),
+
+		/* send_multicast */
+		cmocka_unit_test(send_multicast_success),
+		cmocka_unit_test(send_multicast_sync),
+		cmocka_unit_test(send_multicast_no_snd_if),
+		cmocka_unit_test(send_multicast_invalid_name),
 
 		/* Group operations */
 		cmocka_unit_test(is_group_present_null_args),
