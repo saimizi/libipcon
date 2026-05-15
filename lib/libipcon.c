@@ -470,12 +470,12 @@ int ipcon_unregister_group(IPCON_HANDLER handler, char *name)
 	if (!iph || !name)
 		return -EINVAL;
 
-	if (!(iph->flags & IPH_FLG_SND_IF))
-		return -EPERM;
-
 	grp_name_len = (int)strlen(name);
 	if (!grp_name_len || grp_name_len > IPCON_MAX_NAME_LEN)
 		return -EINVAL;
+
+	if (!(iph->flags & IPH_FLG_SND_IF))
+		return -EPERM;
 
 	ipcon_c_lock(iph);
 	do {
