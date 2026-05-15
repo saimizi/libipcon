@@ -89,21 +89,20 @@ jobs:
           lcov --capture \
             --directory lib/CMakeFiles/ipcon.dir/ \
             --output-file coverage.info \
-            --rc lcov_branch_coverage=1
+            --rc branch_coverage=1
 
           lcov --remove coverage.info '/usr/include/*' \
             -o coverage.info \
-            --rc lcov_branch_coverage=1
+            --rc branch_coverage=1
 
           echo "## Coverage Summary" > ${{ github.workspace }}/coverage.md
           echo '```' >> ${{ github.workspace }}/coverage.md
-          lcov -l coverage.info --rc lcov_branch_coverage=1 \
-            | tail -n +2 >> ${{ github.workspace }}/coverage.md
+          lcov --summary coverage.info --rc branch_coverage=1 >> ${{ github.workspace }}/coverage.md 2>&1
           echo '```' >> ${{ github.workspace }}/coverage.md
 
           genhtml coverage.info \
             --output-directory coverage \
-            --rc genhtml_branch_coverage=1
+            --rc branch_coverage=1
 
       - name: Post coverage to PR
         if: github.event_name == 'pull_request'
