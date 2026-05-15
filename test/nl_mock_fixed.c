@@ -130,3 +130,26 @@ struct nl_sock *__wrap_nl_socket_alloc_cb(struct nl_cb *cb)
 	sock_cbs[idx].sk = sk;
 	return sk;
 }
+
+int __wrap_nl_connect(struct nl_sock *sk, int prot)
+{
+	assert_non_null(sk);
+	check_expected(prot);
+	return mock_type(int);
+}
+
+struct nl_cb *__wrap_nl_cb_alloc(enum nl_cb_kind kind)
+{
+	int test_null = mock_type(int);
+	if (test_null)
+		return NULL;
+	extern struct nl_cb *__real_nl_cb_alloc(enum nl_cb_kind);
+	return __real_nl_cb_alloc(kind);
+}
+
+int __wrap_nl_send_auto(struct nl_sock *sk, struct nl_msg *msg)
+{
+	assert_non_null(sk);
+	assert_non_null(msg);
+	return mock_type(int);
+}
