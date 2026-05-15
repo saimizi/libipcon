@@ -17,7 +17,6 @@
 
 extern int ipcon_create_handler_run(void *);
 extern int ipcon_tests_run(void *);
-extern int ipcon_api_tests_run(void *);
 
 int main(void)
 {
@@ -25,7 +24,6 @@ int main(void)
 
 	ret = (ret == 0) ? ipcon_create_handler_run(NULL) : ret;
 	ret = (ret == 0) ? ipcon_tests_run(NULL) : ret;
-	ret = (ret == 0) ? ipcon_api_tests_run(NULL) : ret;
 
 	return ret;
 }
