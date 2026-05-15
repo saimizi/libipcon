@@ -231,7 +231,7 @@ static void rcv_no_rcv_if(void **state)
  * r_chan init sequence before the PEER_REG send_rcv.
  */
 static void expect_handler_named_single_with_rcvif(const char *peer_name,
-						    char **strdup_out)
+						   char **strdup_out)
 {
 	static char namebuf[32];
 	strncpy(namebuf, peer_name, sizeof(namebuf) - 1);
@@ -332,8 +332,8 @@ static struct nl_msg *build_ipcon_usr_msg(const char *peer_name,
 	struct nl_msg *msg = nlmsg_alloc();
 	assert_non_null(msg);
 
-	nlmsg_put(msg, NL_AUTO_PORT, NL_AUTO_SEQ,
-		  IPCON_USR_MSG, IPCONMSG_HDRLEN, NLM_F_REQUEST);
+	nlmsg_put(msg, NL_AUTO_PORT, NL_AUTO_SEQ, IPCON_USR_MSG,
+		  IPCONMSG_HDRLEN, NLM_F_REQUEST);
 	nla_put_string(msg, IPCON_ATTR_PEER_NAME, peer_name);
 	nla_put(msg, IPCON_ATTR_DATA, payload_len, payload);
 
@@ -348,8 +348,8 @@ static struct nl_msg *build_ipcon_mcast_msg(const char *peer_name,
 	struct nl_msg *msg = nlmsg_alloc();
 	assert_non_null(msg);
 
-	nlmsg_put(msg, NL_AUTO_PORT, NL_AUTO_SEQ,
-		  IPCON_MULTICAST_MSG, IPCONMSG_HDRLEN, NLM_F_REQUEST);
+	nlmsg_put(msg, NL_AUTO_PORT, NL_AUTO_SEQ, IPCON_MULTICAST_MSG,
+		  IPCONMSG_HDRLEN, NLM_F_REQUEST);
 	nla_put_string(msg, IPCON_ATTR_PEER_NAME, peer_name);
 	nla_put_string(msg, IPCON_ATTR_GROUP_NAME, group_name);
 	nla_put(msg, IPCON_ATTR_DATA, payload_len, payload);
@@ -363,8 +363,8 @@ static struct nl_msg *build_ipcon_missing_peer_msg(void)
 	assert_non_null(msg);
 	char payload[] = "no peer name";
 
-	nlmsg_put(msg, NL_AUTO_PORT, NL_AUTO_SEQ,
-		  IPCON_USR_MSG, IPCONMSG_HDRLEN, NLM_F_REQUEST);
+	nlmsg_put(msg, NL_AUTO_PORT, NL_AUTO_SEQ, IPCON_USR_MSG,
+		  IPCONMSG_HDRLEN, NLM_F_REQUEST);
 	nla_put(msg, IPCON_ATTR_DATA, strlen(payload) + 1, payload);
 
 	return msg;
@@ -375,8 +375,8 @@ static struct nl_msg *build_ipcon_missing_data_msg(void)
 	struct nl_msg *msg = nlmsg_alloc();
 	assert_non_null(msg);
 
-	nlmsg_put(msg, NL_AUTO_PORT, NL_AUTO_SEQ,
-		  IPCON_USR_MSG, IPCONMSG_HDRLEN, NLM_F_REQUEST);
+	nlmsg_put(msg, NL_AUTO_PORT, NL_AUTO_SEQ, IPCON_USR_MSG,
+		  IPCONMSG_HDRLEN, NLM_F_REQUEST);
 	nla_put_string(msg, IPCON_ATTR_PEER_NAME, "sender");
 
 	return msg;
@@ -388,8 +388,8 @@ static struct nl_msg *build_ipcon_invalid_type_msg(void)
 	assert_non_null(msg);
 
 	/* Use an nlmsg_type that doesn't match any IPCON message type */
-	nlmsg_put(msg, NL_AUTO_PORT, NL_AUTO_SEQ,
-		  IPCON_TYPE_MAX, IPCONMSG_HDRLEN, NLM_F_REQUEST);
+	nlmsg_put(msg, NL_AUTO_PORT, NL_AUTO_SEQ, IPCON_TYPE_MAX,
+		  IPCONMSG_HDRLEN, NLM_F_REQUEST);
 	nla_put_string(msg, IPCON_ATTR_PEER_NAME, "sender");
 	nla_put(msg, IPCON_ATTR_DATA, 4, "data");
 
@@ -435,12 +435,12 @@ static void rcv_success(void **state)
 
 	expect_handler_named_single_with_rcvif("rcv_ok", &strdup_peer_name);
 
-	IPCON_HANDLER handler = ipcon_create_handler("rcv_ok",
-						      LIBIPCON_FLG_USE_RCV_IF);
+	IPCON_HANDLER handler =
+		ipcon_create_handler("rcv_ok", LIBIPCON_FLG_USE_RCV_IF);
 	assert_non_null(handler);
 
-	struct nl_msg *mock_msg = build_ipcon_usr_msg(
-		sender, payload, strlen(payload) + 1);
+	struct nl_msg *mock_msg =
+		build_ipcon_usr_msg(sender, payload, strlen(payload) + 1);
 	assert_non_null(mock_msg);
 
 	struct ipcon_peer_handler *iph = handler_to_iph(handler);
@@ -468,10 +468,10 @@ static void rcv_invalid_msg_type(void **state)
 	char *strdup_peer_name = NULL;
 
 	expect_handler_named_single_with_rcvif("rcv_badtype",
-					      &strdup_peer_name);
+					       &strdup_peer_name);
 
-	IPCON_HANDLER handler = ipcon_create_handler("rcv_badtype",
-						      LIBIPCON_FLG_USE_RCV_IF);
+	IPCON_HANDLER handler =
+		ipcon_create_handler("rcv_badtype", LIBIPCON_FLG_USE_RCV_IF);
 	assert_non_null(handler);
 
 	struct nl_msg *mock_msg = build_ipcon_invalid_type_msg();
@@ -497,11 +497,10 @@ static void rcv_missing_peer(void **state)
 {
 	char *strdup_peer_name = NULL;
 
-	expect_handler_named_single_with_rcvif("rcv_nopeer",
-					      &strdup_peer_name);
+	expect_handler_named_single_with_rcvif("rcv_nopeer", &strdup_peer_name);
 
-	IPCON_HANDLER handler = ipcon_create_handler("rcv_nopeer",
-						      LIBIPCON_FLG_USE_RCV_IF);
+	IPCON_HANDLER handler =
+		ipcon_create_handler("rcv_nopeer", LIBIPCON_FLG_USE_RCV_IF);
 	assert_non_null(handler);
 
 	struct nl_msg *mock_msg = build_ipcon_missing_peer_msg();
@@ -528,11 +527,10 @@ static void rcv_missing_data(void **state)
 {
 	char *strdup_peer_name = NULL;
 
-	expect_handler_named_single_with_rcvif("rcv_nodata",
-					      &strdup_peer_name);
+	expect_handler_named_single_with_rcvif("rcv_nodata", &strdup_peer_name);
 
-	IPCON_HANDLER handler = ipcon_create_handler("rcv_nodata",
-						      LIBIPCON_FLG_USE_RCV_IF);
+	IPCON_HANDLER handler =
+		ipcon_create_handler("rcv_nodata", LIBIPCON_FLG_USE_RCV_IF);
 	assert_non_null(handler);
 
 	struct nl_msg *mock_msg = build_ipcon_missing_data_msg();
@@ -561,15 +559,14 @@ static void rcv_multicast_msg(void **state)
 	char *sender = "mcast_sender";
 	char *group = "my_group";
 
-	expect_handler_named_single_with_rcvif("rcv_mcast",
-					      &strdup_peer_name);
+	expect_handler_named_single_with_rcvif("rcv_mcast", &strdup_peer_name);
 
-	IPCON_HANDLER handler = ipcon_create_handler("rcv_mcast",
-						      LIBIPCON_FLG_USE_RCV_IF);
+	IPCON_HANDLER handler =
+		ipcon_create_handler("rcv_mcast", LIBIPCON_FLG_USE_RCV_IF);
 	assert_non_null(handler);
 
-	struct nl_msg *mock_msg = build_ipcon_mcast_msg(
-		sender, group, payload, strlen(payload) + 1);
+	struct nl_msg *mock_msg = build_ipcon_mcast_msg(sender, group, payload,
+							strlen(payload) + 1);
 	assert_non_null(mock_msg);
 
 	struct ipcon_peer_handler *iph = handler_to_iph(handler);
@@ -601,11 +598,10 @@ static void rcv_kevent_msg(void **state)
 	char *sender = "kernel";
 	char *kevent_grp = LIBIPCON_KERNEL_GROUP_NAME;
 
-	expect_handler_named_single_with_rcvif("rcv_kevent",
-					      &strdup_peer_name);
+	expect_handler_named_single_with_rcvif("rcv_kevent", &strdup_peer_name);
 
-	IPCON_HANDLER handler = ipcon_create_handler("rcv_kevent",
-						      LIBIPCON_FLG_USE_RCV_IF);
+	IPCON_HANDLER handler =
+		ipcon_create_handler("rcv_kevent", LIBIPCON_FLG_USE_RCV_IF);
 	assert_non_null(handler);
 
 	struct nl_msg *mock_msg = build_ipcon_mcast_msg(
