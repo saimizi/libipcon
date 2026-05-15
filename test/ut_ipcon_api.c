@@ -34,17 +34,18 @@
  * strdup returns a static buffer.  free(check=true) for the static
  * buffer, free(check=false) for iph.
  */
-static void expect_handler_named_single(char **strdup_out)
+static void expect_handler_named_single(const char *peer_name, char **strdup_out)
 {
 	static char namebuf[32];
-	strcpy(namebuf, "test_peer");
+	strncpy(namebuf, peer_name, sizeof(namebuf) - 1);
+	namebuf[sizeof(namebuf) - 1] = '\0';
 	*strdup_out = namebuf;
 
 	will_return(__wrap__test_malloc, false);
 	will_return(__wrap__test_malloc, true);
 
 	will_return(__wrap_strdup, 1);
-	expect_string(__wrap_strdup, s, "test_peer");
+	expect_string(__wrap_strdup, s, peer_name);
 	will_return(__wrap_strdup, *strdup_out);
 
 	/* c_chan init */
@@ -83,7 +84,7 @@ static void is_peer_present_with_rcv_if(void **state)
 	char *strdup_peer_name = NULL;
 	char *server_name = "server_b";
 
-	expect_handler_named_single(&strdup_peer_name);
+	expect_handler_named_single("client_a", &strdup_peer_name);
 
 	IPCON_HANDLER handler = ipcon_create_handler("client_a", 0);
 	assert_non_null(handler);
@@ -114,7 +115,7 @@ static void is_peer_present_notfound(void **state)
 	char *strdup_peer_name = NULL;
 	char *server_name = "nonexistent_server";
 
-	expect_handler_named_single(&strdup_peer_name);
+	expect_handler_named_single("client_a", &strdup_peer_name);
 
 	IPCON_HANDLER handler = ipcon_create_handler("client_a", 0);
 	assert_non_null(handler);
@@ -146,7 +147,7 @@ static void register_group_invalid_name(void **state)
 {
 	char *strdup_peer_name = NULL;
 
-	expect_handler_named_single(&strdup_peer_name);
+	expect_handler_named_single("grp_test", &strdup_peer_name);
 
 	IPCON_HANDLER handler = ipcon_create_handler("grp_test", 0);
 	assert_non_null(handler);
@@ -172,7 +173,7 @@ static void rcv_no_rcv_if(void **state)
 {
 	char *strdup_peer_name = NULL;
 
-	expect_handler_named_single(&strdup_peer_name);
+	expect_handler_named_single("sendonly_test", &strdup_peer_name);
 
 	IPCON_HANDLER handler = ipcon_create_handler("sendonly_test", 0);
 	assert_non_null(handler);
@@ -210,7 +211,7 @@ static void join_leave_no_rcv_if(void **state)
 {
 	char *strdup_peer_name = NULL;
 
-	expect_handler_named_single(&strdup_peer_name);
+	expect_handler_named_single("nojoin_test", &strdup_peer_name);
 
 	IPCON_HANDLER handler = ipcon_create_handler("nojoin_test", 0);
 	assert_non_null(handler);
@@ -236,7 +237,7 @@ static void register_group_success(void **state)
 	char *strdup_peer_name = NULL;
 	char *group_name = "test_group";
 
-	expect_handler_named_single(&strdup_peer_name);
+	expect_handler_named_single("reg_test", &strdup_peer_name);
 
 	IPCON_HANDLER handler = ipcon_create_handler("reg_test", 0);
 	assert_non_null(handler);
@@ -264,7 +265,7 @@ static void register_group_no_snd_if(void **state)
 {
 	char *strdup_peer_name = NULL;
 
-	expect_handler_named_single(&strdup_peer_name);
+	expect_handler_named_single("nosnd_test", &strdup_peer_name);
 
 	IPCON_HANDLER handler = ipcon_create_handler("nosnd_test", 0);
 	assert_non_null(handler);
@@ -281,7 +282,7 @@ static void unregister_group_success(void **state)
 	char *strdup_peer_name = NULL;
 	char *group_name = "my_group";
 
-	expect_handler_named_single(&strdup_peer_name);
+	expect_handler_named_single("unreg_test", &strdup_peer_name);
 
 	IPCON_HANDLER handler = ipcon_create_handler("unreg_test", 0);
 	assert_non_null(handler);
@@ -309,7 +310,7 @@ static void unregister_group_no_snd_if(void **state)
 {
 	char *strdup_peer_name = NULL;
 
-	expect_handler_named_single(&strdup_peer_name);
+	expect_handler_named_single("nounreg_test", &strdup_peer_name);
 
 	IPCON_HANDLER handler = ipcon_create_handler("nounreg_test", 0);
 	assert_non_null(handler);
