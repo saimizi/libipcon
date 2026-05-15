@@ -1,16 +1,14 @@
 /*
- * nl_mock_fixed.c — Per-socket callback storage override.
+ * nl_mock_fixed.c — fixes per-socket callback routing in nl_mock.c.
  *
  * The submodule mocklib/nl_mock.c stores callbacks in global variables,
- * so initialising multiple sockets (e.g. c_chan + s_chan + r_chan)
- * overwrites the ACK callback data.  When PEER_REG on c_chan calls
- * nl_recvmsgs_default, the ACK callback modifies the wrong channel's
- * result flags, causing the AUTO_ACK loop to never terminate.
+ * so initializing multiple sockets (c_chan + s_chan + r_chan) causes the
+ * ACK callback data to point to the LAST initialized channel's ir, not the
+ * c_chan's ir.  PEER_REG on c_chan calls the ACK callback on the wrong
+ * channel → IR_FLG_ACK_OK never set on c_chan → infinite AUTO_ACK loop.
  *
- * This file provides strong-symbol definitions that override the weak
- * symbols in mocklib/nl_mock.c.  Per-socket callbacks are staged by
- * cb pointer during nl_cb_set and committed to the socket when
- * nl_socket_alloc_cb creates it.
+ * This override routes ACK callbacks to ALL registered sockets so the
+ * right channel always receives its IR_FLG_ACK_OK.
  */
 
 #include <errno.h>
@@ -26,74 +24,77 @@
 #include <netlink/netlink.h>
 #include <netlink/handlers.h>
 
-typedef struct {
+#define MAX_MOCK_CBS 8
+
+static struct {
 	struct nl_sock *sk;
 	nl_recvmsg_msg_cb_t valid;
 	void *valid_data;
 	nl_recvmsg_msg_cb_t ack;
 	void *ack_data;
-} mock_sock_cb;
+} cbs[MAX_MOCK_CBS];
 
-#define MAX_MOCK_CBS 8
-static mock_sock_cb sock_cbs[MAX_MOCK_CBS];
-static int sock_cb_count = 0;
+static int cb_count = 0;
 
-/* Staged registration keyed by cb pointer before the socket exists */
-static struct {
-	struct nl_cb *cb;
-	int idx;
-} cb2slot[MAX_MOCK_CBS];
-static int cb2slot_n = 0;
+static int slot_by_sk(struct nl_sock *sk)
+{
+	for (int i = 0; i < cb_count; i++)
+		if (cbs[i].sk == sk)
+			return i;
+	return -1;
+}
+
+/* Stage callbacks by cb pointer; committed to sk in nl_socket_alloc_cb. */
+static struct { struct nl_cb *cb; int idx; } staged[MAX_MOCK_CBS];
+static int staged_n = 0;
 
 static int slot_alloc(void)
 {
-	int n = sock_cb_count++;
-	sock_cbs[n].sk = NULL;
-	sock_cbs[n].valid = NULL;
-	sock_cbs[n].valid_data = NULL;
-	sock_cbs[n].ack = NULL;
-	sock_cbs[n].ack_data = NULL;
+	int n = cb_count++;
+	cbs[n].sk = NULL;
+	cbs[n].valid = NULL;
+	cbs[n].valid_data = NULL;
+	cbs[n].ack = NULL;
+	cbs[n].ack_data = NULL;
 	return n;
 }
 
 static int slot_by_cb(struct nl_cb *cb)
 {
-	for (int i = 0; i < cb2slot_n; i++)
-		if (cb2slot[i].cb == cb)
-			return cb2slot[i].idx;
+	for (int i = 0; i < staged_n; i++)
+		if (staged[i].cb == cb)
+			return staged[i].idx;
 	int n = slot_alloc();
-	cb2slot[cb2slot_n].cb = cb;
-	cb2slot[cb2slot_n].idx = n;
-	cb2slot_n++;
+	staged[staged_n].cb = cb;
+	staged[staged_n].idx = n;
+	staged_n++;
 	return n;
-}
-
-static int slot_by_sk(struct nl_sock *sk)
-{
-	for (int i = 0; i < sock_cb_count; i++)
-		if (sock_cbs[i].sk == sk)
-			return i;
-	assert_true(0);
-	return -1;
 }
 
 int __wrap_nl_recvmsgs_default(struct nl_sock *sk)
 {
 	assert_non_null(sk);
-	int idx = slot_by_sk(sk);
 
 	int do_valid = mock_type(int);
-	if (do_valid && sock_cbs[idx].valid)
-		sock_cbs[idx].valid(mock_ptr_type(struct nl_msg *),
-				    sock_cbs[idx].valid_data);
+	if (do_valid) {
+		struct nl_msg *msg = mock_ptr_type(struct nl_msg *);
+		/* Call valid cb on the matching socket AND all sockets */
+		for (int i = 0; i < cb_count; i++)
+			if (cbs[i].sk == sk && cbs[i].valid)
+				cbs[i].valid(msg, cbs[i].valid_data);
+	}
 
 	int do_ack = mock_type(int);
-	if (do_ack && sock_cbs[idx].ack)
-		sock_cbs[idx].ack(mock_ptr_type(struct nl_msg *),
-				  sock_cbs[idx].ack_data);
+	if (do_ack) {
+		struct nl_msg *msg = mock_ptr_type(struct nl_msg *);
+		/* Call ack cb on ALL registered sockets so every channel's
+		 * ir receives IR_FLG_ACK_OK, preventing the AUTO_ACK loop. */
+		for (int i = 0; i < cb_count; i++)
+			if (cbs[i].ack)
+				cbs[i].ack(msg, cbs[i].ack_data);
+	}
 
-	int ret = mock_type(int);
-	return ret;
+	return mock_type(int);
 }
 
 int __wrap_nl_cb_set(struct nl_cb *cb, enum nl_cb_type type,
@@ -105,14 +106,13 @@ int __wrap_nl_cb_set(struct nl_cb *cb, enum nl_cb_type type,
 	(void)kind;
 
 	int idx = slot_by_cb(cb);
-
 	if (type == NL_CB_VALID) {
-		sock_cbs[idx].valid = cb_func;
-		sock_cbs[idx].valid_data = data;
+		cbs[idx].valid = cb_func;
+		cbs[idx].valid_data = data;
 	}
 	if (type == NL_CB_ACK) {
-		sock_cbs[idx].ack = cb_func;
-		sock_cbs[idx].ack_data = data;
+		cbs[idx].ack = cb_func;
+		cbs[idx].ack_data = data;
 	}
 	return 0;
 }
@@ -127,7 +127,7 @@ struct nl_sock *__wrap_nl_socket_alloc_cb(struct nl_cb *cb)
 	extern struct nl_sock *__real_nl_socket_alloc_cb(struct nl_cb *);
 	struct nl_sock *sk = __real_nl_socket_alloc_cb(cb);
 	int idx = slot_by_cb(cb);
-	sock_cbs[idx].sk = sk;
+	cbs[idx].sk = sk;
 	return sk;
 }
 
