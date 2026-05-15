@@ -13,15 +13,14 @@
  * See the GNU Lesser General Public License for more details.
  */
 
-
 #ifndef __TIMESTAMP_MSG_H__
 #define __TIMESTAMP_MSG_H__
 
 #include <sys/time.h>
 
-#define MAX_STAMP_CNT	5
-#define MARKER_MAX_LEN	4
-#define TSLOG_BUF_SIZE	(32 * MAX_STAMP_CNT)
+#define MAX_STAMP_CNT 5
+#define MARKER_MAX_LEN 4
+#define TSLOG_BUF_SIZE (32 * MAX_STAMP_CNT)
 
 struct ts_msg {
 	int last_free_idx;
@@ -52,9 +51,7 @@ static inline void tsm_recod(char *marker, struct ts_msg *tm)
 
 		gettimeofday(&tm->ts[i], NULL);
 		if (marker) {
-			strncpy(tm->mark[i],
-				marker,
-				MARKER_MAX_LEN);
+			strncpy(tm->mark[i], marker, MARKER_MAX_LEN);
 			tm->mark[i][MARKER_MAX_LEN - 1] = '\0';
 		} else {
 			sprintf(tm->mark[i], "m%d", i);
@@ -64,10 +61,9 @@ static inline void tsm_recod(char *marker, struct ts_msg *tm)
 	}
 }
 
-static inline void get_tv_diff(struct timeval *snd_ts,
-		struct timeval *rcv_ts, struct timeval *diff)
+static inline void get_tv_diff(struct timeval *snd_ts, struct timeval *rcv_ts,
+			       struct timeval *diff)
 {
-
 	if (!snd_ts || !rcv_ts || !diff)
 		return;
 
@@ -79,7 +75,6 @@ static inline void get_tv_diff(struct timeval *snd_ts,
 		diff->tv_usec = 1000000 - snd_ts->tv_usec + rcv_ts->tv_usec;
 	}
 }
-
 
 static inline void tsm_delta(struct ts_msg *tm, char *buf, int size)
 {
@@ -97,23 +92,18 @@ static inline void tsm_delta(struct ts_msg *tm, char *buf, int size)
 	if (size < TSLOG_BUF_SIZE)
 		return;
 
-
 	get_tv_diff(&tm->ts[0], &tm->ts[tm->last_free_idx - 1], &diff);
-	len = sprintf(p, "%s->%s: %d.%06d ",
-			tm->mark[0],
-			tm->mark[tm->last_free_idx - 1],
-			(int)diff.tv_sec,
-			(int)diff.tv_usec);
+	len = sprintf(p, "%s->%s: %d.%06d ", tm->mark[0],
+		      tm->mark[tm->last_free_idx - 1], (int)diff.tv_sec,
+		      (int)diff.tv_usec);
 
 	p += len;
 
 	for (i = 0; i < tm->last_free_idx - 1; i++) {
 		get_tv_diff(&tm->ts[i], &tm->ts[i + 1], &diff);
-		len = sprintf(p, "%s->%s: %d.%06d ",
-			tm->mark[i],
-			tm->mark[i + 1],
-			(int)diff.tv_sec,
-			(int)diff.tv_usec);
+		len = sprintf(p, "%s->%s: %d.%06d ", tm->mark[i],
+			      tm->mark[i + 1], (int)diff.tv_sec,
+			      (int)diff.tv_usec);
 		p += len;
 	}
 	*p = '\0';

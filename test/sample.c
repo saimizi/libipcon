@@ -13,7 +13,6 @@
  * See the GNU Lesser General Public License for more details.
  */
 
-
 #include <stdio.h>
 #include <errno.h>
 #include <stdlib.h>

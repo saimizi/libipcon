@@ -8,8 +8,13 @@ endif()
 
 set(LIBIPCON_INCLUDE ${PROJECT_SOURCE_DIR}/lib/ LIBNL_GENL_INCLUDE_DIRS)
 
-# ######################### libipcon ############################
-set(UT_SOURCES ut_main.c ut_ipcon_create_handler.c)
+# Main test executable (all test groups combined)
+set(UT_SOURCES
+    ut_main.c
+    ut_ipcon_create_handler.c
+    ut_ipcon.c
+)
+
 add_executable(ut_ipcon ${UT_SOURCES})
 target_link_libraries(ut_ipcon cmocka wrap_symbols ipcon)
 target_include_directories(ut_ipcon PUBLIC ${LIBIPCON_INCLUDE})
@@ -19,3 +24,5 @@ if(ENABLE_COVERAGE)
     target_link_libraries(ut_ipcon "--coverage")
   endif()
 endif()
+
+

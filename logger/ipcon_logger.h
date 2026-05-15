@@ -13,21 +13,20 @@
  * See the GNU Lesser General Public License for more details.
  */
 
-
 #ifndef __IPCON_LOGGER_H
 #define __IPCON_LOGGER_H
 
 #include <string.h>
 #include <stdarg.h>
 
-#define LOGGER_PEER_NAME	"ipcon_logger"
-#define LOGGER_GROUP_NAME	"ipcon_logger"
+#define LOGGER_PEER_NAME "ipcon_logger"
+#define LOGGER_GROUP_NAME "ipcon_logger"
 
 #include <sys/time.h>
 #include "libipcon.h"
 
-#define LOGGER_MSG_LIMIT	(LIBIPCON_MAX_PAYLOAD_LEN - sizeof(struct timeval))
-#define IPCON_LOGGER_MSG_LEN	LOGGER_MSG_LIMIT
+#define LOGGER_MSG_LIMIT (LIBIPCON_MAX_PAYLOAD_LEN - sizeof(struct timeval))
+#define IPCON_LOGGER_MSG_LEN LOGGER_MSG_LIMIT
 
 struct logger_msg {
 	struct timeval ts;

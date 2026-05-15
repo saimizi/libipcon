@@ -13,7 +13,6 @@
  * See the GNU Lesser General Public License for more details.
  */
 
-
 #ifndef __UT_H__
 #include <stdlib.h>
 #include <setjmp.h>
