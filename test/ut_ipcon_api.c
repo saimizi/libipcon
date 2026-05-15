@@ -296,6 +296,200 @@ static void join_leave_no_rcv_if(void **state)
 	ipcon_free_handler(handler);
 }
 
+/*
+ * ipcon_register_group / ipcon_unregister_group success paths
+ *
+ * register_group sends IPCON_GRP_REG via c_chan and expects ack.
+ * unregister_group sends IPCON_GRP_UNREG via c_chan and expects ack.
+ * Both require IPH_FLG_SND_IF.
+ */
+
+static void register_group_success(void **state)
+{
+	char *peer_name = "reg_test";
+	char *strdup_peer_name = "reg_test";
+	char *group_name = "test_group";
+	char iph_mem[1024];
+
+	will_return(__wrap__test_malloc, false);
+	will_return(__wrap__test_malloc, false);
+	will_return(__wrap__test_malloc, iph_mem);
+
+	will_return(__wrap_strdup, 1);
+	expect_string(__wrap_strdup, s, peer_name);
+	will_return(__wrap_strdup, strdup_peer_name);
+
+	/* c_chan init */
+	will_return(__wrap_nl_cb_alloc, 0);
+	will_return(__wrap_nl_socket_alloc_cb, 0);
+	expect_value(__wrap_nl_connect, prot, NETLINK_IPCON);
+	will_return(__wrap_nl_connect, 0);
+
+	/* s_chan init (SND_IF) */
+	will_return(__wrap_nl_cb_alloc, 0);
+	will_return(__wrap_nl_socket_alloc_cb, 0);
+	expect_value(__wrap_nl_connect, prot, NETLINK_IPCON);
+	will_return(__wrap_nl_connect, 0);
+
+	/* PEER_REG send_rcv */
+	will_return(__wrap_nl_send_auto, 0);
+	will_return(__wrap_nl_recvmsgs_default, 0);
+	will_return(__wrap_nl_recvmsgs_default, 1);
+	will_return(__wrap_nl_recvmsgs_default, NULL);
+	will_return(__wrap_nl_recvmsgs_default, 0);
+
+	IPCON_HANDLER handler = ipcon_create_handler(peer_name,
+		LIBIPCON_FLG_USE_SND_IF);
+	assert_non_null(handler);
+
+	/* register_group: IPCON_GRP_REG send_rcv */
+	will_return(__wrap_nl_send_auto, 0);
+	will_return(__wrap_nl_recvmsgs_default, 0);
+	will_return(__wrap_nl_recvmsgs_default, 1);
+	will_return(__wrap_nl_recvmsgs_default, NULL);
+	will_return(__wrap_nl_recvmsgs_default, 0);
+
+	int ret = ipcon_register_group(handler, group_name);
+	assert_int_equal(ret, 0);
+
+	will_return(__wrap__test_free, true);
+	will_return(__wrap__test_free, strdup_peer_name);
+	will_return(__wrap__test_free, false);
+	ipcon_free_handler(handler);
+}
+
+static void register_group_no_snd_if(void **state)
+{
+	char *peer_name = "nosnd_test";
+	char *strdup_peer_name = "nosnd_test";
+	char iph_mem[1024];
+
+	will_return(__wrap__test_malloc, false);
+	will_return(__wrap__test_malloc, false);
+	will_return(__wrap__test_malloc, iph_mem);
+
+	will_return(__wrap_strdup, 1);
+	expect_string(__wrap_strdup, s, peer_name);
+	will_return(__wrap_strdup, strdup_peer_name);
+
+	/* c_chan init only (no SND_IF) */
+	will_return(__wrap_nl_cb_alloc, 0);
+	will_return(__wrap_nl_socket_alloc_cb, 0);
+	expect_value(__wrap_nl_connect, prot, NETLINK_IPCON);
+	will_return(__wrap_nl_connect, 0);
+
+	/* PEER_REG send_rcv */
+	will_return(__wrap_nl_send_auto, 0);
+	will_return(__wrap_nl_recvmsgs_default, 0);
+	will_return(__wrap_nl_recvmsgs_default, 1);
+	will_return(__wrap_nl_recvmsgs_default, NULL);
+	will_return(__wrap_nl_recvmsgs_default, 0);
+
+	IPCON_HANDLER handler = ipcon_create_handler(peer_name, 0);
+	assert_non_null(handler);
+
+	/* Without SND_IF, register_group should return -EPERM */
+	assert_int_equal(ipcon_register_group(handler, "any_group"), -EPERM);
+
+	will_return(__wrap__test_free, true);
+	will_return(__wrap__test_free, strdup_peer_name);
+	will_return(__wrap__test_free, false);
+	ipcon_free_handler(handler);
+}
+
+static void unregister_group_success(void **state)
+{
+	char *peer_name = "unreg_test";
+	char *strdup_peer_name = "unreg_test";
+	char *group_name = "my_group";
+	char iph_mem[1024];
+
+	will_return(__wrap__test_malloc, false);
+	will_return(__wrap__test_malloc, false);
+	will_return(__wrap__test_malloc, iph_mem);
+
+	will_return(__wrap_strdup, 1);
+	expect_string(__wrap_strdup, s, peer_name);
+	will_return(__wrap_strdup, strdup_peer_name);
+
+	/* c_chan init */
+	will_return(__wrap_nl_cb_alloc, 0);
+	will_return(__wrap_nl_socket_alloc_cb, 0);
+	expect_value(__wrap_nl_connect, prot, NETLINK_IPCON);
+	will_return(__wrap_nl_connect, 0);
+
+	/* s_chan init (SND_IF) */
+	will_return(__wrap_nl_cb_alloc, 0);
+	will_return(__wrap_nl_socket_alloc_cb, 0);
+	expect_value(__wrap_nl_connect, prot, NETLINK_IPCON);
+	will_return(__wrap_nl_connect, 0);
+
+	/* PEER_REG send_rcv */
+	will_return(__wrap_nl_send_auto, 0);
+	will_return(__wrap_nl_recvmsgs_default, 0);
+	will_return(__wrap_nl_recvmsgs_default, 1);
+	will_return(__wrap_nl_recvmsgs_default, NULL);
+	will_return(__wrap_nl_recvmsgs_default, 0);
+
+	IPCON_HANDLER handler = ipcon_create_handler(peer_name,
+		LIBIPCON_FLG_USE_SND_IF);
+	assert_non_null(handler);
+
+	/* unregister_group: IPCON_GRP_UNREG send_rcv */
+	will_return(__wrap_nl_send_auto, 0);
+	will_return(__wrap_nl_recvmsgs_default, 0);
+	will_return(__wrap_nl_recvmsgs_default, 1);
+	will_return(__wrap_nl_recvmsgs_default, NULL);
+	will_return(__wrap_nl_recvmsgs_default, 0);
+
+	int ret = ipcon_unregister_group(handler, group_name);
+	assert_int_equal(ret, 0);
+
+	will_return(__wrap__test_free, true);
+	will_return(__wrap__test_free, strdup_peer_name);
+	will_return(__wrap__test_free, false);
+	ipcon_free_handler(handler);
+}
+
+static void unregister_group_no_snd_if(void **state)
+{
+	char *peer_name = "nounreg_test";
+	char *strdup_peer_name = "nounreg_test";
+	char iph_mem[1024];
+
+	will_return(__wrap__test_malloc, false);
+	will_return(__wrap__test_malloc, false);
+	will_return(__wrap__test_malloc, iph_mem);
+
+	will_return(__wrap_strdup, 1);
+	expect_string(__wrap_strdup, s, peer_name);
+	will_return(__wrap_strdup, strdup_peer_name);
+
+	/* c_chan init only */
+	will_return(__wrap_nl_cb_alloc, 0);
+	will_return(__wrap_nl_socket_alloc_cb, 0);
+	expect_value(__wrap_nl_connect, prot, NETLINK_IPCON);
+	will_return(__wrap_nl_connect, 0);
+
+	/* PEER_REG send_rcv */
+	will_return(__wrap_nl_send_auto, 0);
+	will_return(__wrap_nl_recvmsgs_default, 0);
+	will_return(__wrap_nl_recvmsgs_default, 1);
+	will_return(__wrap_nl_recvmsgs_default, NULL);
+	will_return(__wrap_nl_recvmsgs_default, 0);
+
+	IPCON_HANDLER handler = ipcon_create_handler(peer_name, 0);
+	assert_non_null(handler);
+
+	/* Without SND_IF, unregister_group should return -EPERM */
+	assert_int_equal(ipcon_unregister_group(handler, "any_group"), -EPERM);
+
+	will_return(__wrap__test_free, true);
+	will_return(__wrap__test_free, strdup_peer_name);
+	will_return(__wrap__test_free, false);
+	ipcon_free_handler(handler);
+}
+
 int ipcon_api_tests_run(void *state)
 {
 	static struct CMUnitTest tests[] = {
@@ -303,8 +497,14 @@ int ipcon_api_tests_run(void *state)
 		cmocka_unit_test(is_peer_present_with_rcv_if),
 		cmocka_unit_test(is_peer_present_notfound),
 
-		/* Group operations */
+		/* register/unregister group */
 		cmocka_unit_test(register_group_invalid_name),
+		cmocka_unit_test(register_group_success),
+		cmocka_unit_test(register_group_no_snd_if),
+		cmocka_unit_test(unregister_group_success),
+		cmocka_unit_test(unregister_group_no_snd_if),
+
+		/* Group operations */
 		cmocka_unit_test(is_group_present_null_args),
 		cmocka_unit_test(join_leave_no_rcv_if),
 
