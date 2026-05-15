@@ -741,6 +741,157 @@ static void join_leave_no_rcv_if(void **state)
 }
 
 /*
+ * Helper: initialise the r_chan fields needed by ipcon_join_group
+ * when the handler was created without LIBIPCON_FLG_USE_RCV_IF.
+ * Sets the RCV_IF flag and initialises the r_chan mutex so that
+ * ipcon_r_lock/r_unlock work.  r_chan.sk remains NULL, which causes
+ * nl_socket_add_memberships to fail — that's fine for error-path
+ * tests.
+ */
+static void enable_rcv_if(struct ipcon_peer_handler *iph)
+{
+	iph->flags |= IPH_FLG_RCV_IF;
+	pthread_mutex_init(&iph->r_chan.mutex, NULL);
+	iph->r_chan.mutex_initialized = true;
+}
+
+/*
+ * ipcon_join_group / ipcon_leave_group tests
+ *
+ * join_group requires RCV_IF and resolves the group via c_chan
+ * (GRP_RESLOVE), then adds multicast membership on r_chan.
+ *
+ * leave_group requires RCV_IF, searches the group list for matching
+ * peer_name+group_name, drops membership if found.
+ */
+
+static void join_null_args(void **state)
+{
+	char *strdup_peer_name = NULL;
+
+	expect_handler_named_single("join_null", &strdup_peer_name);
+
+	IPCON_HANDLER handler = ipcon_create_handler("join_null", 0);
+	assert_non_null(handler);
+
+	{
+		struct ipcon_peer_handler *iph = handler_to_iph(handler);
+		iph->flags |= IPH_FLG_RCV_IF;
+	}
+
+	/* NULL peer_name */
+	assert_int_equal(ipcon_join_group(handler, NULL, "grp"), -EINVAL);
+	/* NULL group_name */
+	assert_int_equal(ipcon_join_group(handler, "peer", NULL), -EINVAL);
+
+	expect_free_handler(strdup_peer_name);
+	ipcon_free_handler(handler);
+}
+
+static void join_invalid_names(void **state)
+{
+	char *strdup_peer_name = NULL;
+
+	expect_handler_named_single("join_inv", &strdup_peer_name);
+
+	IPCON_HANDLER handler = ipcon_create_handler("join_inv", 0);
+	assert_non_null(handler);
+
+	{
+		struct ipcon_peer_handler *iph = handler_to_iph(handler);
+		iph->flags |= IPH_FLG_RCV_IF;
+	}
+
+	/* Empty names */
+	assert_int_equal(ipcon_join_group(handler, "", "grp"), -EINVAL);
+	assert_int_equal(ipcon_join_group(handler, "peer", ""), -EINVAL);
+
+	expect_free_handler(strdup_peer_name);
+	ipcon_free_handler(handler);
+}
+
+static void join_get_group_fails(void **state)
+{
+	char *strdup_peer_name = NULL;
+
+	expect_handler_named_single("join_fail", &strdup_peer_name);
+
+	IPCON_HANDLER handler = ipcon_create_handler("join_fail", 0);
+	assert_non_null(handler);
+
+	struct ipcon_peer_handler *iph = handler_to_iph(handler);
+	enable_rcv_if(iph);
+
+	/* malloc for ipcon_group_info, then free(igi) on error */
+	will_return(__wrap__test_malloc, false);
+	will_return(__wrap__test_malloc, true);
+	will_return(__wrap__test_free, false);
+
+	/* Make GRP_RESLOVE send fail */
+	will_return(__wrap_nl_send_auto, -ENOENT);
+
+	int ret = ipcon_join_group(handler, "some_peer", "some_group");
+	assert_int_not_equal(ret, 0);
+
+	expect_free_handler(strdup_peer_name);
+	ipcon_free_handler(handler);
+}
+
+/*
+ * ipcon_leave_group: NULL args -> -EINVAL
+ */
+
+static void leave_null_args(void **state)
+{
+	char *strdup_peer_name = NULL;
+
+	expect_handler_named_single("leave_null", &strdup_peer_name);
+
+	IPCON_HANDLER handler = ipcon_create_handler("leave_null", 0);
+	assert_non_null(handler);
+
+	{
+		struct ipcon_peer_handler *iph = handler_to_iph(handler);
+		iph->flags |= IPH_FLG_RCV_IF;
+	}
+
+	/* NULL parameters */
+	assert_int_equal(ipcon_leave_group(NULL, "peer", "grp"), -EINVAL);
+	assert_int_equal(ipcon_leave_group(handler, NULL, "grp"), -EINVAL);
+	assert_int_equal(ipcon_leave_group(handler, "peer", NULL), -EINVAL);
+
+	expect_free_handler(strdup_peer_name);
+	ipcon_free_handler(handler);
+}
+
+/*
+ * ipcon_leave_group: leave a group that was never joined.
+ * Searches the group list, finds nothing, returns 0.
+ */
+
+static void leave_not_joined(void **state)
+{
+	char *strdup_peer_name = NULL;
+
+	expect_handler_named_single("leave_noop", &strdup_peer_name);
+
+	IPCON_HANDLER handler = ipcon_create_handler("leave_noop", 0);
+	assert_non_null(handler);
+
+	{
+		struct ipcon_peer_handler *iph = handler_to_iph(handler);
+		enable_rcv_if(iph);
+	}
+
+	/* Leave a group that was never joined — list is empty, noop */
+	int ret = ipcon_leave_group(handler, "never_joined", "no_group");
+	assert_int_equal(ret, 0);
+
+	expect_free_handler(strdup_peer_name);
+	ipcon_free_handler(handler);
+}
+
+/*
  * ipcon_send_unicast tests
  *
  * Sends IPCON_USR_MSG via s_chan with PEER_NAME and DATA attributes.
@@ -1099,6 +1250,11 @@ int ipcon_api_tests_run(void *state)
 		cmocka_unit_test(is_group_present_not_found),
 		cmocka_unit_test(is_group_present_found),
 		cmocka_unit_test(join_leave_no_rcv_if),
+		cmocka_unit_test(join_null_args),
+		cmocka_unit_test(join_invalid_names),
+		cmocka_unit_test(join_get_group_fails),
+		cmocka_unit_test(leave_null_args),
+		cmocka_unit_test(leave_not_joined),
 
 		/* rcv */
 		cmocka_unit_test(rcv_no_rcv_if),
