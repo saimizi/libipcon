@@ -3,16 +3,35 @@ name: libipcon CI
 on:
   pull_request:
     branches: [ main, master ]
-    paths-ignore:
-      - '**.md'
-      - 'Document/**'
-      - 'LICENSE'
   push:
     branches: [ main, master ]
 
 jobs:
+  changes:
+    name: Detect changes
+    runs-on: ubuntu-latest
+    permissions:
+      pull-requests: read
+    outputs:
+      src: ${{ steps.filter.outputs.src }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          # Invert the logic: list what is NOT source.
+          # Any file that doesn't match these patterns is source.
+          # This way new source types (e.g. .rs, .py) auto-trigger CI.
+          filters: |
+            src:
+              - '!**.md'
+              - '!Document/**'
+              - '!LICENSE'
+
   code-style:
     name: Code Style
+    needs: changes
+    if: needs.changes.outputs.src == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -38,6 +57,8 @@ jobs:
 
   build:
     name: Build
+    needs: changes
+    if: needs.changes.outputs.src == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -55,6 +76,8 @@ jobs:
 
   test:
     name: Unit Tests + Coverage
+    needs: changes
+    if: needs.changes.outputs.src == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
