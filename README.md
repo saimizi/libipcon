@@ -2,7 +2,7 @@
 
 [![Version](https://img.shields.io/badge/version-0.0.1-blue)](https://github.com/saimizi/libipcon)
 [![License](https://img.shields.io/badge/license-LGPLv2.1-green)](LICENSE)
-[![Build](https://img.shields.io/badge/build-cmake%20%7C%20meson-orange)](BUILD.md)
+[![Build](https://img.shields.io/badge/build-cmake-blue)](BUILD.md)
 
 **LIBIPCON (IPC Over Netlink)** is a high-performance, packet-based IPC mechanism built on Linux netlink sockets. It provides efficient message communication among multiple local processes with support for both unicast and multicast messaging, automatic peer discovery, and event notifications.
 
@@ -72,9 +72,10 @@ LIBIPCON consists of several key components:
 - **Dependencies**:
   - `libnl-genl-3.0` - Netlink Generic Library
   - `libc` - Standard C Library
+  - `cmocka` - Unit testing framework (required for unit tests)
 - **Build Tools**:
   - GCC or Clang compiler
-  - CMake 3.10+ OR Meson 0.50+
+  - CMake 3.10+
   - pkg-config
 - **Kernel Module**: IPCON kernel driver (loaded via `modprobe ipcon`)
 
@@ -226,21 +227,10 @@ make
 
 **CMake Options:**
 - `-DUNIT_TEST=ON` - Build unit tests
+- `-DENABLE_NL_MOCK=ON` - Enable netlink mocking for tests
+- `-DENABLE_COVERAGE=ON` - Enable test coverage instrumentation
 - `-DBUILD_LOGGER=ON` - Build logger utilities
 - `-DBUILD_SAMPLES=ON` - Build sample applications
-
-### Using Meson
-```bash
-meson setup build [OPTIONS]
-meson compile -C build
-```
-
-**Meson Options:**
-- `-Dunit_test=true` - Build unit tests
-- `-Dbuild_logger=true` - Build logger utilities  
-- `-Dbuild_sample=true` - Build sample applications
-- `-Denable_coverage=true` - Enable test coverage
-- `-Denable_nl_mock=true` - Enable netlink mocking for tests
 
 ## Testing
 
@@ -248,13 +238,9 @@ meson compile -C build
 ```bash
 # CMake
 mkdir build && cd build
-cmake -DUNIT_TEST=ON ..
+cmake -DUNIT_TEST=ON -DENABLE_NL_MOCK=ON ..
 make
-./test/ut_main
-
-# Meson
-meson setup build -Dunit_test=true
-meson test -C build
+./test/ut_ipcon
 ```
 
 ### Integration Tests
@@ -265,10 +251,13 @@ cd samples
 
 ### Coverage Report
 ```bash
-# Meson with coverage
-meson setup build -Dunit_test=true -Denable_coverage=true
-meson test -C build
-ninja -C build coverage
+# CMake with coverage
+mkdir build && cd build
+cmake -DUNIT_TEST=ON -DENABLE_NL_MOCK=ON -DENABLE_COVERAGE=ON ..
+make
+test/ut_ipcon
+lcov --capture --directory lib/ --output-file coverage.info --no-external --rc lcov_branch_coverage=1
+genhtml coverage.info --output-directory coverage
 ```
 
 ## Components
@@ -307,4 +296,4 @@ This project is licensed under the GNU Lesser General Public License v2.1 - see 
 
 ---
 
-**Note**: Make sure the IPCON kernel module is loaded (`sudo modprobe ipcon`) before using the library.
+**Note**: The IPCON kernel driver (in `driver/`) must be built separately and loaded before using the library. See the [driver documentation](driver/README.md) for instructions.
