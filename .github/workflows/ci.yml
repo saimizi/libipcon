@@ -3,6 +3,10 @@ name: libipcon CI
 on:
   pull_request:
     branches: [ main, master ]
+    paths-ignore:
+      - '**.md'
+      - 'Document/**'
+      - 'LICENSE'
   push:
     branches: [ main, master ]
 
