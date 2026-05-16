@@ -77,7 +77,7 @@ LIBIPCON consists of several key components:
   - GCC or Clang compiler
   - CMake 3.10+
   - pkg-config
-- **Kernel Module**: IPCON kernel driver (loaded via `modprobe ipcon`)
+- **Kernel Module**: IPCON kernel driver (must be built separately — see `driver/`)
 
 ## Installation
 
